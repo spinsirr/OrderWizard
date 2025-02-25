@@ -1,24 +1,28 @@
 import tkinter as tk
 import ttkbootstrap as ttk
 from ttkbootstrap.constants import *
-from order import Order
-from PIL import Image, ImageTk
 from tkinterdnd2 import DND_FILES, TkinterDnD
+from PIL import Image, ImageTk
 import os
+from order import Order
 
-class OrderWizardUI:
+class UploadScreen:
     def __init__(self, root):
         if not isinstance(root, TkinterDnD.Tk):
             raise TypeError("Root window must be an instance of TkinterDnD.Tk")
         
         self.root = root
-        self.root.title("Order Wizard")
+        self.root.title("Order Wizard - Upload")
         self.root.geometry("1200x800")
         
-        # Store the current image reference
+        # Store current state
         self.current_image = None
         self.current_image_path = None
         
+        self._init_ui()
+        
+    def _init_ui(self):
+        """Initialize all UI components"""
         # Create main container with padding
         self.main_container = ttk.Frame(self.root, padding="20")
         self.main_container.pack(fill=BOTH, expand=YES)
@@ -26,7 +30,7 @@ class OrderWizardUI:
         # Create title
         title = ttk.Label(
             self.main_container,
-            text="Order Wizard",
+            text="Upload Order",
             font=("Helvetica", 24, "bold"),
             bootstyle="primary"
         )
@@ -36,6 +40,12 @@ class OrderWizardUI:
         self.content_container = ttk.Frame(self.main_container)
         self.content_container.pack(fill=BOTH, expand=YES)
         
+        self._init_image_section()
+        self._init_text_section()
+        self._init_buttons()
+        
+    def _init_image_section(self):
+        """Initialize image section UI"""
         # Image section (left side)
         self.image_frame = ttk.LabelFrame(
             self.content_container,
@@ -56,6 +66,8 @@ class OrderWizardUI:
         self.image_label.drop_target_register(DND_FILES)
         self.image_label.dnd_bind('<<Drop>>', self.handle_drop)
         
+    def _init_text_section(self):
+        """Initialize text section UI"""
         # Text section (right side)
         self.text_frame = ttk.LabelFrame(
             self.content_container,
@@ -74,6 +86,8 @@ class OrderWizardUI:
         )
         self.text_area.pack(fill=BOTH, expand=YES)
         
+    def _init_buttons(self):
+        """Initialize button section UI"""
         # Create a frame for buttons
         self.button_frame = ttk.Frame(self.main_container)
         self.button_frame.pack(fill=X, pady=(20, 0))
@@ -97,16 +111,19 @@ class OrderWizardUI:
         self.clear_button.pack(side=RIGHT, padx=(0, 10))
 
     def handle_drop(self, event):
+        """Handle image file drop event"""
         file_path = event.data
         # Remove curly braces if present (Windows)
         file_path = file_path.strip('{}')
         
         if file_path.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.bmp')):
             self.load_image(file_path)
+            self.current_image_path = file_path
         else:
             print("Please drop a valid image file")
 
     def load_image(self, file_path):
+        """Load and display image"""
         try:
             # Open and resize image
             image = Image.open(file_path)
@@ -132,12 +149,12 @@ class OrderWizardUI:
             # Update label with image
             self.image_label.configure(image=photo, text="")
             self.current_image = photo  # Keep a reference
-            self.current_image_path = file_path
             
         except Exception as e:
             print(f"Error loading image: {e}")
     
     def submit_order(self):
+        """Handle order submission"""
         order_text = self.text_area.get("1.0", tk.END).strip()
         if order_text:
             order = Order.create_from_text(order_text)
@@ -147,8 +164,8 @@ class OrderWizardUI:
             print("\n=== Order Details ===")
             print(f"Order Number: {order.order_number}")
             print(f"Amount: ${order.amount:.2f}")
-            print(f"Image URI: {order.image_uri if hasattr(order, 'image_uri') else 'Not set'}")
-            print(f"Comment in Picture: {order.comment_in_picture if hasattr(order, 'comment_in_picture') else False}")
+            print(f"Image URI: {order.image_uri if order.image_uri else 'Not set'}")
+            print(f"Comment in Picture: {order.comment_in_picture}")
             print(f"Commented: {order.commented}")
             print(f"Revealed: {order.revealed}")
             print(f"Reimbursed: {order.reimbursed}")
@@ -156,16 +173,8 @@ class OrderWizardUI:
             print("==================\n")
     
     def clear_form(self):
+        """Clear all form fields"""
         self.text_area.delete("1.0", tk.END)
         self.image_label.configure(image="", text="Drag and drop image here")
         self.current_image = None
-        self.current_image_path = None
-
-def main():
-    root = TkinterDnD.Tk()
-    root.style = ttk.Style(theme="cosmo")
-    app = OrderWizardUI(root)
-    root.mainloop()
-
-if __name__ == "__main__":
-    main() 
+        self.current_image_path = None 
