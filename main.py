@@ -2,6 +2,7 @@ from tkinterdnd2 import TkinterDnD
 import ttkbootstrap as ttk
 from ui.view.add_order_view import AddOrderView
 from ui.view.order_list_view import OrderListView
+from ui.viewmodel.order_list_viewmodel import OrderListViewModel
 import logging
 import sys
 
@@ -12,6 +13,9 @@ class MainApplication:
         self.root.geometry("1200x800")
         self.root.style = ttk.Style(theme="cosmo")
         
+        # Initialize shared ViewModel
+        self.order_list_viewmodel = OrderListViewModel()
+        
         self.current_screen = None
         self.show_order_list()
         
@@ -19,13 +23,13 @@ class MainApplication:
         """Show the order list screen"""
         if self.current_screen:
             self.current_screen.destroy()
-        self.current_screen = OrderListView(self.root, self.show_add_order)
+        self.current_screen = OrderListView(self.root, self.order_list_viewmodel, self.show_add_order)
         
     def show_add_order(self):
         """Show the add order screen"""
         if self.current_screen:
             self.current_screen.destroy()
-        self.current_screen = AddOrderView(self.root)
+        self.current_screen = AddOrderView(self.root, self.order_list_viewmodel)
         # Add back button
         back_button = ttk.Button(
             self.current_screen.button_frame,

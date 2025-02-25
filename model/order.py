@@ -8,7 +8,7 @@ class Order:
     order_number: str
     amount: float
     image_uri: Optional[str] = None
-    comment_in_picture: bool = False
+    comment_with_picture: bool = False
     commented: bool = False
     revealed: bool = False
     reimbursed: bool = False

@@ -3,20 +3,16 @@ import ttkbootstrap as ttk
 from ttkbootstrap.constants import *
 from tkinterdnd2 import DND_FILES
 from PIL import Image, ImageTk
-from model.order import Order
-from db.database import Database
+from ui.viewmodel.order_list_viewmodel import OrderListViewModel
 
 class AddOrderView(ttk.Frame):
-    def __init__(self, parent):
+    def __init__(self, parent, viewmodel: OrderListViewModel):
         super().__init__(parent, padding="20")
         self.parent = parent
+        self.viewmodel = viewmodel
         
-        # Store current state
-        self.current_image = None
-        self.current_image_path = None
-        
-        # Initialize database
-        self.db = Database()
+        # Store current image for display
+        self.current_image_display = None
         
         self._init_ui()
         self.pack(fill=BOTH, expand=YES)
@@ -38,6 +34,7 @@ class AddOrderView(ttk.Frame):
         
         self._init_image_section()
         self._init_text_section()
+        self._init_order_options()
         self._init_buttons()
         
     def _init_image_section(self):
@@ -45,7 +42,7 @@ class AddOrderView(ttk.Frame):
         # Image section (left side)
         self.image_frame = ttk.LabelFrame(
             self.content_container,
-            text="Order Image (Drag & Drop)",
+            text="Order Image (Optional)",
             padding="10"
         )
         self.image_frame.pack(side=LEFT, fill=BOTH, expand=YES, padx=(0, 10))
@@ -82,6 +79,23 @@ class AddOrderView(ttk.Frame):
         )
         self.text_area.pack(fill=BOTH, expand=YES)
         
+    def _init_order_options(self):
+        """Initialize order options section"""
+        # Create options frame
+        self.options_frame = ttk.Frame(self)
+        self.options_frame.pack(fill=X, pady=(10, 0))
+        
+        # Add checkbox for comment with picture
+        self.comment_var = tk.BooleanVar(value=False)
+        self.comment_checkbox = ttk.Checkbutton(
+            self.options_frame,
+            text="Comment with Picture",
+            variable=self.comment_var,
+            command=self._on_comment_changed,
+            bootstyle="primary-round-toggle"
+        )
+        self.comment_checkbox.pack(side=LEFT)
+        
     def _init_buttons(self):
         """Initialize button section UI"""
         # Create a frame for buttons
@@ -106,6 +120,11 @@ class AddOrderView(ttk.Frame):
         )
         self.clear_button.pack(side=RIGHT, padx=(0, 10))
 
+    def _on_comment_changed(self):
+        """Handle comment checkbox state change"""
+        self.viewmodel.set_comment_with_picture(self.comment_var.get())
+        self.viewmodel.refresh()
+
     def handle_drop(self, event):
         """Handle image file drop event"""
         file_path = event.data
@@ -114,7 +133,7 @@ class AddOrderView(ttk.Frame):
         
         if file_path.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.bmp')):
             self.load_image(file_path)
-            self.current_image_path = file_path
+            self.viewmodel.set_current_image(file_path)
         else:
             print("Please drop a valid image file")
 
@@ -144,7 +163,7 @@ class AddOrderView(ttk.Frame):
             
             # Update label with image
             self.image_label.configure(image=photo, text="")
-            self.current_image = photo  # Keep a reference
+            self.current_image_display = photo  # Keep a reference
             
         except Exception as e:
             print(f"Error loading image: {e}")
@@ -153,34 +172,22 @@ class AddOrderView(ttk.Frame):
         """Handle order submission"""
         order_text = self.text_area.get("1.0", tk.END).strip()
         if order_text:
-            order = Order.create_from_text(order_text)
-            if self.current_image_path:
-                order.image_uri = self.current_image_path
-                
-            # Insert order into database
-            self.db.insert_order(order)
-            
-            print("\n=== Order Details ===")
-            print(f"Order Number: {order.order_number}")
-            print(f"Amount: ${order.amount:.2f}")
-            print(f"Image URI: {order.image_uri if order.image_uri else 'Not set'}")
-            print(f"Comment in Picture: {order.comment_in_picture}")
-            print(f"Commented: {order.commented}")
-            print(f"Revealed: {order.revealed}")
-            print(f"Reimbursed: {order.reimbursed}")
-            print(f"Reimbursed Amount: ${order.reimbursed_amount:.2f}")
-            print("==================\n")
-            
-            # Clear form after successful submission
-            self.clear_form()
+            if self.viewmodel.add_order(order_text):
+                print("Order added successfully")
+                self.clear_form()
+            else:
+                print("Failed to add order")
     
     def clear_form(self):
         """Clear all form fields"""
+        # Clear text area
         self.text_area.delete("1.0", tk.END)
+        
+        # Clear image
         self.image_label.configure(image="", text="Drag and drop image here")
-        self.current_image = None
-        self.current_image_path = None
-
-    def __del__(self):
-        """Ensure database connection is closed on destruction"""
-        self.db.close() 
+        self.current_image_display = None
+        self.viewmodel.clear_current_image()
+        
+        # Clear comment with picture
+        self.comment_var.set(False)
+        self.viewmodel.clear_comment_with_picture() 

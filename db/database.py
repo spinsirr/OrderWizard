@@ -69,7 +69,7 @@ class Database:
                 # Expected columns
                 expected_columns = {
                     'id', 'order_number', 'amount', 'image_uri',
-                    'comment_in_picture', 'commented', 'revealed',
+                    'comment_with_picture', 'commented', 'revealed',
                     'reimbursed', 'reimbursed_amount', 'created_at'
                 }
                 
@@ -93,7 +93,7 @@ class Database:
                     order_number TEXT NOT NULL,
                     amount REAL NOT NULL CHECK (amount > 0),
                     image_uri TEXT,
-                    comment_in_picture BOOLEAN DEFAULT FALSE,
+                    comment_with_picture BOOLEAN DEFAULT FALSE,
                     commented BOOLEAN DEFAULT FALSE,
                     revealed BOOLEAN DEFAULT FALSE,
                     reimbursed BOOLEAN DEFAULT FALSE,
@@ -118,11 +118,11 @@ class Database:
                 cursor = conn.cursor()
                 cursor.execute('''
                     INSERT INTO orders (
-                        order_number, amount, image_uri, comment_in_picture, 
+                        order_number, amount, image_uri, comment_with_picture, 
                         commented, revealed, reimbursed, reimbursed_amount
                     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 ''', (
-                    order.order_number, order.amount, order.image_uri, order.comment_in_picture,
+                    order.order_number, order.amount, order.image_uri, order.comment_with_picture,
                     order.commented, order.revealed, order.reimbursed, order.reimbursed_amount
                 ))
                 conn.commit()
@@ -160,14 +160,14 @@ class Database:
                         order_number = ?,
                         amount = ?,
                         image_uri = ?,
-                        comment_in_picture = ?,
+                        comment_with_picture = ?,
                         commented = ?,
                         revealed = ?,
                         reimbursed = ?,
                         reimbursed_amount = ?
                     WHERE id = ?
                 ''', (
-                    order.order_number, order.amount, order.image_uri, order.comment_in_picture,
+                    order.order_number, order.amount, order.image_uri, order.comment_with_picture,
                     order.commented, order.revealed, order.reimbursed, order.reimbursed_amount,
                     order_id
                 ))
@@ -199,7 +199,7 @@ class Database:
         try:
             with sqlite3.connect(self.db_name) as conn:
                 cursor = conn.cursor()
-                cursor.execute('SELECT * FROM orders ORDER BY created_at ASC ')  # Changed to ASC
+                cursor.execute('SELECT * FROM orders ORDER BY created_at ASC')  # Changed to ASC
                 return cursor.fetchall()
         except sqlite3.Error as e:
             logging.error(f"Database error: {e}")

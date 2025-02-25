@@ -32,6 +32,9 @@ ENV/
 env/
 .env
 
+# Database
+orders.db
+
 # Misc
 .DS_Store
 *.log
