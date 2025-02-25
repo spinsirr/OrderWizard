@@ -1,43 +1,39 @@
 import tkinter as tk
 import ttkbootstrap as ttk
 from ttkbootstrap.constants import *
-from tkinterdnd2 import DND_FILES, TkinterDnD
+from tkinterdnd2 import DND_FILES
 from PIL import Image, ImageTk
-import os
-from order import Order
+from model.order import Order
+from db.database import Database
 
-class UploadScreen:
-    def __init__(self, root):
-        if not isinstance(root, TkinterDnD.Tk):
-            raise TypeError("Root window must be an instance of TkinterDnD.Tk")
-        
-        self.root = root
-        self.root.title("Order Wizard - Upload")
-        self.root.geometry("1200x800")
+class AddOrderView(ttk.Frame):
+    def __init__(self, parent):
+        super().__init__(parent, padding="20")
+        self.parent = parent
         
         # Store current state
         self.current_image = None
         self.current_image_path = None
         
+        # Initialize database
+        self.db = Database()
+        
         self._init_ui()
+        self.pack(fill=BOTH, expand=YES)
         
     def _init_ui(self):
         """Initialize all UI components"""
-        # Create main container with padding
-        self.main_container = ttk.Frame(self.root, padding="20")
-        self.main_container.pack(fill=BOTH, expand=YES)
-        
         # Create title
         title = ttk.Label(
-            self.main_container,
-            text="Upload Order",
+            self,
+            text="Add New Order",
             font=("Helvetica", 24, "bold"),
             bootstyle="primary"
         )
         title.pack(pady=(0, 20))
         
         # Create horizontal container for image and text sections
-        self.content_container = ttk.Frame(self.main_container)
+        self.content_container = ttk.Frame(self)
         self.content_container.pack(fill=BOTH, expand=YES)
         
         self._init_image_section()
@@ -89,7 +85,7 @@ class UploadScreen:
     def _init_buttons(self):
         """Initialize button section UI"""
         # Create a frame for buttons
-        self.button_frame = ttk.Frame(self.main_container)
+        self.button_frame = ttk.Frame(self)
         self.button_frame.pack(fill=X, pady=(20, 0))
         
         # Submit button
@@ -161,6 +157,9 @@ class UploadScreen:
             if self.current_image_path:
                 order.image_uri = self.current_image_path
                 
+            # Insert order into database
+            self.db.insert_order(order)
+            
             print("\n=== Order Details ===")
             print(f"Order Number: {order.order_number}")
             print(f"Amount: ${order.amount:.2f}")
@@ -171,10 +170,17 @@ class UploadScreen:
             print(f"Reimbursed: {order.reimbursed}")
             print(f"Reimbursed Amount: ${order.reimbursed_amount:.2f}")
             print("==================\n")
+            
+            # Clear form after successful submission
+            self.clear_form()
     
     def clear_form(self):
         """Clear all form fields"""
         self.text_area.delete("1.0", tk.END)
         self.image_label.configure(image="", text="Drag and drop image here")
         self.current_image = None
-        self.current_image_path = None 
+        self.current_image_path = None
+
+    def __del__(self):
+        """Ensure database connection is closed on destruction"""
+        self.db.close() 
