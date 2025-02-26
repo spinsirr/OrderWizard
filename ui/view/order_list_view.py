@@ -55,7 +55,8 @@ class OrderListView(ttk.Frame):
             self,
             columns=columns,
             show="headings",
-            bootstyle="primary"
+            bootstyle="primary",
+            height=15  # Show 15 rows at a time
         )
         
         # Configure columns

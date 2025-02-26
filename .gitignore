@@ -35,6 +35,9 @@ env/
 # Database
 orders.db
 
+# Images
+images/
+
 # Misc
 .DS_Store
 *.log
