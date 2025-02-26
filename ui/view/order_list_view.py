@@ -105,6 +105,7 @@ class OrderListView(ttk.Frame):
             self.tree.bind("<Button-3>", self._show_context_menu)  # Right click
             
         self.tree.bind("<Button-1>", self._handle_click)  # Left click
+        self.tree.bind("<Double-Button-1>", self._handle_double_click)  # Double click
 
     def _show_context_menu(self, event):
         """Show the context menu on right click"""
@@ -263,4 +264,11 @@ class OrderListView(ttk.Frame):
 
     def refresh(self):
         """Refresh the order list"""
-        self.viewmodel.refresh() 
+        self.viewmodel.refresh()
+
+    def _handle_double_click(self, event):
+        """Handle double click events"""
+        item = self.tree.identify_row(event.y)
+        if item:
+            self._edit_selected_order()
+            return "break"  # Prevent event propagation 
