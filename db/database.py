@@ -70,7 +70,7 @@ class Database:
                 expected_columns = {
                     'id', 'order_number', 'amount', 'image_uri',
                     'comment_with_picture', 'commented', 'revealed',
-                    'reimbursed', 'reimbursed_amount', 'created_at'
+                    'reimbursed', 'reimbursed_amount', 'note', 'created_at'
                 }
                 
                 if not expected_columns.issubset(columns):
@@ -98,6 +98,7 @@ class Database:
                     revealed BOOLEAN DEFAULT FALSE,
                     reimbursed BOOLEAN DEFAULT FALSE,
                     reimbursed_amount REAL DEFAULT 0.0,
+                    note TEXT,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             ''')
@@ -119,11 +120,12 @@ class Database:
                 cursor.execute('''
                     INSERT INTO orders (
                         order_number, amount, image_uri, comment_with_picture, 
-                        commented, revealed, reimbursed, reimbursed_amount
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                        commented, revealed, reimbursed, reimbursed_amount, note
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ''', (
                     order.order_number, order.amount, order.image_uri, order.comment_with_picture,
-                    order.commented, order.revealed, order.reimbursed, order.reimbursed_amount
+                    order.commented, order.revealed, order.reimbursed, order.reimbursed_amount,
+                    order.note
                 ))
                 conn.commit()
                 return cursor.lastrowid
@@ -164,12 +166,13 @@ class Database:
                         commented = ?,
                         revealed = ?,
                         reimbursed = ?,
-                        reimbursed_amount = ?
+                        reimbursed_amount = ?,
+                        note = ?
                     WHERE id = ?
                 ''', (
                     order.order_number, order.amount, order.image_uri, order.comment_with_picture,
                     order.commented, order.revealed, order.reimbursed, order.reimbursed_amount,
-                    order_id
+                    order.note, order_id
                 ))
                 conn.commit()
                 return cursor.rowcount > 0

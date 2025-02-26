@@ -13,6 +13,7 @@ class Order:
     revealed: bool = False
     reimbursed: bool = False
     reimbursed_amount: float = 0.0
+    note: Optional[str] = None
 
     @staticmethod
     def parse_order_text(order_text: str) -> 'Order':
@@ -40,5 +41,29 @@ class Order:
 
     @staticmethod
     def create_from_text(text: str) -> 'Order':
-        """Alias for parse_order_text for better readability"""
-        return Order.parse_order_text(text)
+        """Create an order from text input"""
+        order = Order(
+            order_number=None,
+            amount=0.0
+        )
+        
+        # Split text into lines and process each line
+        lines = text.strip().split('\n')
+        for line in lines:
+            line = line.strip()
+            if line.startswith('Order #'):
+                order.order_number = line.replace('Order #', '').strip()
+            elif '$' in line:
+                # Extract amount
+                amount_str = line.split('$')[1].strip().replace(',', '')
+                try:
+                    order.amount = float(amount_str)
+                except ValueError:
+                    raise ValueError("Invalid amount format")
+        
+        if not order.order_number:
+            raise ValueError("Order number not found in text")
+        if order.amount <= 0:
+            raise ValueError("Invalid or missing amount")
+            
+        return order

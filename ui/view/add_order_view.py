@@ -4,7 +4,7 @@ from ttkbootstrap.constants import *
 from tkinterdnd2 import DND_FILES
 from PIL import Image, ImageTk
 from ui.viewmodel.order_list_viewmodel import OrderListViewModel
-
+from model.order import Order
 class AddOrderView(ttk.Frame):
     def __init__(self, parent, viewmodel: OrderListViewModel):
         super().__init__(parent, padding="20")
@@ -74,10 +74,27 @@ class AddOrderView(ttk.Frame):
             self.text_frame,
             wrap=tk.WORD,
             font=("Helvetica", 11),
-            height=20,
+            height=10,  # Reduced height to make room for note
             width=50
         )
-        self.text_area.pack(fill=BOTH, expand=YES)
+        self.text_area.pack(fill=BOTH, expand=YES, pady=(0, 10))
+        
+        # Note section
+        note_label = ttk.Label(
+            self.text_frame,
+            text="Note (optional):",
+            font=("Helvetica", 11)
+        )
+        note_label.pack(anchor=W, pady=(10, 5))
+        
+        self.note_area = tk.Text(
+            self.text_frame,
+            wrap=tk.WORD,
+            font=("Helvetica", 11),
+            height=5,
+            width=50
+        )
+        self.note_area.pack(fill=BOTH, expand=YES)
         
     def _init_order_options(self):
         """Initialize order options section"""
@@ -171,17 +188,42 @@ class AddOrderView(ttk.Frame):
     def submit_order(self):
         """Handle order submission"""
         order_text = self.text_area.get("1.0", tk.END).strip()
+        note_text = self.note_area.get("1.0", tk.END).strip()
+        
         if order_text:
-            if self.viewmodel.add_order(order_text):
-                print("Order added successfully")
-                self.clear_form()
-            else:
-                print("Failed to add order")
+            try:
+                # Create order from text
+                order = Order.create_from_text(order_text)
+                
+                # Set note if provided
+                if note_text:
+                    order.note = note_text
+                    
+                # Set image and other properties through viewmodel
+                if self.viewmodel._current_image_path:
+                    new_image_path = self.viewmodel._copy_image_for_order(
+                        order.order_number,
+                        self.viewmodel._current_image_path
+                    )
+                    if new_image_path:
+                        order.image_uri = new_image_path
+                
+                order.comment_with_picture = self.comment_var.get()
+                
+                # Add to database through viewmodel
+                if self.viewmodel.db.insert_order(order):
+                    print("Order added successfully")
+                    self.clear_form()
+                else:
+                    print("Failed to add order")
+            except Exception as e:
+                print(f"Error adding order: {e}")
     
     def clear_form(self):
         """Clear all form fields"""
-        # Clear text area
+        # Clear text areas
         self.text_area.delete("1.0", tk.END)
+        self.note_area.delete("1.0", tk.END)
         
         # Clear image
         self.image_label.configure(image="", text="Drag and drop image here")
