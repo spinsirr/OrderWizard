@@ -15,6 +15,7 @@ class OrderListView(ttk.Frame):
         self.viewmodel = viewmodel
         self.on_add_click = on_add_click
         self.edit_window = None
+        self.original_orders = []  # Store original orders for search filtering
         
         self._init_ui()
         self.viewmodel.set_data_changed_callback(self.update_ui)
@@ -37,6 +38,31 @@ class OrderListView(ttk.Frame):
             bootstyle="primary"
         )
         title.pack(side=LEFT)
+        
+        # Search frame (new)
+        search_frame = ttk.Frame(header_frame)
+        search_frame.pack(side=LEFT, padx=20)
+        
+        # Search entry
+        self.search_var = tk.StringVar()
+        self.search_var.trace("w", self._on_search_change)
+        search_entry = ttk.Entry(
+            search_frame,
+            textvariable=self.search_var,
+            width=30
+        )
+        search_entry.pack(side=LEFT, padx=5)
+        
+        # Search type combobox
+        self.search_type = ttk.Combobox(
+            search_frame,
+            values=["Order Number", "Amount"],
+            width=15,
+            state="readonly"
+        )
+        self.search_type.set("Order Number")
+        self.search_type.pack(side=LEFT, padx=5)
+        self.search_type.bind("<<ComboboxSelected>>", lambda e: self._on_search_change())
         
         # Add Order button
         add_button = ttk.Button(
@@ -83,6 +109,7 @@ class OrderListView(ttk.Frame):
         
         # Configure tag for completed orders
         self.tree.tag_configure('completed', background='#90EE90')  # Light green color
+        self.tree.tag_configure('match', background='#FFE5B4')  # Light orange for search matches
         
         # Add scrollbar
         scrollbar = ttk.Scrollbar(self, orient=VERTICAL, command=self.tree.yview)
@@ -234,16 +261,44 @@ class OrderListView(ttk.Frame):
             self.edit_window.destroy()
             self.edit_window = None
 
-    def update_ui(self):
-        """Update the UI with current data"""
+    def _on_search_change(self, *args):
+        """Handle search input changes"""
+        search_text = self.search_var.get().strip()
+        search_type = self.search_type.get()
+        
         # Clear existing items
         for item in self.tree.get_children():
             self.tree.delete(item)
+        
+        if not search_text:
+            # If search is empty, show all orders
+            self._display_orders(self.viewmodel.orders)
+            return
             
-        # Add orders to tree
+        filtered_orders = []
         for order in self.viewmodel.orders:
-            note_display = order[9] if order[9] else ""  # Display empty string if note is None
-            
+            if search_type == "Order Number":
+                # Search in order number (partial match)
+                if search_text.lower() in str(order[1]).lower():
+                    filtered_orders.append(order)
+            else:  # Amount search
+                try:
+                    search_amount = float(search_text)
+                    order_amount = float(order[2])
+                    # Match if amount is within ±3
+                    if abs(search_amount - order_amount) <= 3:
+                        filtered_orders.append(order)
+                except ValueError:
+                    continue
+        
+        self._display_orders(filtered_orders, highlight_search=True)
+
+    def _display_orders(self, orders, highlight_search=False):
+        """Display orders in the tree view"""
+        search_text = self.search_var.get().strip().lower()
+        search_type = self.search_type.get()
+        
+        for order in orders:
             # Check if all status flags are True
             is_completed = all([
                 order[5],  # Commented
@@ -251,8 +306,25 @@ class OrderListView(ttk.Frame):
                 order[7]   # Reimbursed
             ])
             
-            # Insert with appropriate tag if completed
-            item = self.tree.insert("", END, values=(
+            tags = []
+            if is_completed:
+                tags.append('completed')
+                
+            if highlight_search and search_text:
+                if search_type == "Order Number" and search_text in str(order[1]).lower():
+                    tags.append('match')
+                elif search_type == "Amount":
+                    try:
+                        search_amount = float(search_text)
+                        order_amount = float(order[2])
+                        if abs(search_amount - order_amount) <= 3:
+                            tags.append('match')
+                    except ValueError:
+                        pass
+            
+            note_display = order[9] if order[9] else ""
+            
+            self.tree.insert("", END, values=(
                 order[0],  # ID
                 order[1],  # Order Number
                 f"${order[2]:.2f}",  # Amount
@@ -261,7 +333,16 @@ class OrderListView(ttk.Frame):
                 "Yes" if order[5] else "No",  # Commented
                 "Yes" if order[6] else "No",  # Revealed
                 "Yes" if order[7] else "No"   # Reimbursed
-            ), tags=('completed',) if is_completed else ())
+            ), tags=tuple(tags))
+
+    def update_ui(self):
+        """Update the UI with current data"""
+        # Clear existing items
+        for item in self.tree.get_children():
+            self.tree.delete(item)
+            
+        # Display orders with current search filter
+        self._on_search_change()
 
     def refresh(self):
         """Refresh the order list"""
