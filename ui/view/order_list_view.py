@@ -123,6 +123,7 @@ class OrderListView(ttk.Frame):
     def _show_toast(self, message: str, bootstyle: str = "success"):
         """Show a toast notification"""
         toast = ToastNotification(
+            title="Notification",
             message=message,
             duration=1000,  # 1 second
             bootstyle=bootstyle,
