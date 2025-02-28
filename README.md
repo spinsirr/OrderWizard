@@ -1,28 +1,69 @@
 # OrderWizard
 
-OrderWizard is a desktop application for managing Amazon orders with a modern, user-friendly interface. Built with Python and Tkinter, it provides an efficient way to track, manage, and monitor the status of your Amazon orders.
+OrderWizard is a desktop application for managing and tracking orders, built with Python and ttkbootstrap, offering a modern user interface and rich functionality.
 
-## Features
+## Core Features
 
-- **Order Management**
-  - Add new orders with order numbers and amounts
-  - Track order status (commented, revealed, reimbursed)
-  - Attach images to orders
-  - Add notes to orders
-  - Double-click orders to edit them
+### 1. Order Management
+- Add New Orders: Quickly create orders from text
+- Edit Orders: Modify order information
+- Delete Orders: Remove unwanted orders
+- Order Status Tracking:
+  - Comment Status
+  - Review Status
+  - Reimbursement Status
 
-- **User Interface**
-  - Modern and intuitive interface using ttkbootstrap
-  - Drag-and-drop support for images
-  - Quick copy order numbers with a single click
-  - Sort and filter orders
-  - Status indicators for order progress
+### 2. Image Processing
+- Drag-and-drop image upload
+- Automatic order image association
+- Support for comments with images
 
-- **Data Management**
-  - SQLite database for reliable data storage
-  - Automatic data validation
-  - Image management system
-  - Data persistence between sessions
+### 3. Search Functionality
+- Order Number Search: Supports partial matching
+- Amount Search: Matches within ±$2 range
+- Real-time search result highlighting
+- Search results marked with orange background
+
+### 4. User Interface
+- Modern interface design
+- Completed orders highlighted in green
+- Quick order number copy (click to copy)
+- Double-click for quick order editing
+- Right-click menu for edit and delete operations
+
+## Usage Guide
+
+### Adding Orders
+1. Click "Add Order" button
+2. Enter order information
+3. Optional: Drag and drop image to designated area
+4. If adding a comment, check "Comment with Picture"
+5. Click save
+
+### Searching Orders
+1. Enter keywords in the search box
+2. Select search type from dropdown menu:
+   - Order Number: Search by order number
+   - Amount: Search by amount (within ±$2 range)
+
+### Editing Orders
+- Method 1: Double-click order row
+- Method 2: Right-click order and select "Edit"
+
+### Copying Order Numbers
+- Click on the order number column to copy to clipboard
+
+## Technical Features
+- Developed in Python
+- Modern UI framework with ttkbootstrap
+- SQLite database storage
+- File drag-and-drop support
+- Logging system
+
+## System Requirements
+- macOS / Windows / Linux
+- Python 3.x
+- Required Python packages (see requirements.txt)
 
 ## Installation
 
@@ -50,45 +91,7 @@ To run the application:
 python main.py
 ```
 
-## Usage
-
-1. **Adding Orders**
-   - Click "Add Order" button
-   - Paste order details from Amazon
-   - Optionally drag and drop an image
-   - Add any additional notes
-   - Click "Submit Order"
-
-2. **Managing Orders**
-   - View all orders in the main list
-   - Double-click an order to edit
-   - Right-click for additional options
-   - Click order numbers to copy them
-   - Track status with checkboxes
-
-3. **Order Status**
-   - Comment with Picture: Order has an image attached
-   - Commented: Order has been commented on
-   - Revealed: Order details have been revealed
-   - Reimbursed: Order has been reimbursed
-
-## System Requirements
-
-- Python 3.12 or higher
-- Operating Systems:
-  - macOS 10.13 or higher
-  - Windows 10 or higher
-  - Linux (major distributions)
-
-## Dependencies
-
-- ttkbootstrap >= 1.10.1
-- Pillow >= 10.0.0
-- tkinterdnd2 >= 0.3.0
-
-## Development
-
-The project structure follows a clean architecture pattern:
+## Project Structure
 
 ```
 OrderWizard/
@@ -102,9 +105,15 @@ OrderWizard/
 └── requirements.txt   # Project dependencies
 ```
 
-## License
+## Dependencies
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+- ttkbootstrap >= 1.10.1
+- Pillow >= 10.0.0
+- tkinterdnd2 >= 0.3.0
+
+## Development
+
+The project follows a clean architecture pattern with clear separation of concerns between the database layer, models, and UI components.
 
 ## Contributing
 
@@ -113,6 +122,10 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
 4. Push to the branch (`git push origin feature/AmazingFeature`)
 5. Open a Pull Request
+
+## License
+
+This project is licensed under the MIT License - see the LICENSE file for details.
 
 ## Support
 
