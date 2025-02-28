@@ -4,6 +4,7 @@ from typing import List, Tuple, Optional, Callable
 from PIL import Image
 import os
 import shutil
+import pytesseract
 
 class OrderListViewModel:
     def __init__(self):
@@ -145,22 +146,66 @@ class OrderListViewModel:
             print(f"Error adding order: {e}")
             return None
 
-    def set_current_image(self, image_path: str) -> bool:
+    def extract_text_from_image(self, image_path: str) -> str:
         """
-        Set the current image for the next order
+        Extract text from image using OCR
         
         Args:
             image_path: Path to the image file
             
         Returns:
-            bool: True if successful, False otherwise
+            str: Extracted text from the image
+        """
+        try:
+            # Open the image
+            image = Image.open(image_path)
+            
+            # Convert PNG with transparency to RGB
+            if image.mode == 'RGBA':
+                # Create a white background image
+                background = Image.new('RGB', image.size, (255, 255, 255))
+                # Paste the image on the background
+                background.paste(image, mask=image.split()[3])  # 3 is the alpha channel
+                image = background
+            elif image.mode != 'RGB':
+                image = image.convert('RGB')
+            
+            # Optionally enhance image for better OCR results
+            # image = image.filter(ImageFilter.SHARPEN)
+            
+            # Extract text using pytesseract
+            text = pytesseract.image_to_string(image)
+            
+            # Clean up the extracted text
+            text = text.strip()
+            
+            # Log the result
+            print(f"OCR Result from {image_path}:")
+            print(text)
+            
+            return text
+        except Exception as e:
+            print(f"Error extracting text from image: {e}")
+            return ""
+
+    def set_current_image(self, image_path: str) -> Tuple[bool, Optional[str]]:
+        """
+        Set the current image for the next order and extract text
+        
+        Args:
+            image_path: Path to the image file
+            
+        Returns:
+            Tuple[bool, Optional[str]]: (success, extracted_text)
         """
         try:
             self._current_image_path = image_path
-            return True
+            # Extract text from the image
+            extracted_text = self.extract_text_from_image(image_path)
+            return True, extracted_text
         except Exception as e:
             print(f"Error setting image: {e}")
-            return False
+            return False, None
 
     def set_comment_with_picture(self, has_comment: bool):
         """Set whether the current order has a comment with the picture"""

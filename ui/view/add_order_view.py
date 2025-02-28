@@ -5,6 +5,9 @@ from tkinterdnd2 import DND_FILES
 from PIL import Image, ImageTk
 from ui.viewmodel.order_list_viewmodel import OrderListViewModel
 from model.order import Order
+from ttkbootstrap.toast import ToastNotification
+import re
+
 class AddOrderView(ttk.Frame):
     def __init__(self, parent, viewmodel: OrderListViewModel):
         super().__init__(parent, padding="20")
@@ -57,7 +60,7 @@ class AddOrderView(ttk.Frame):
         
         # Configure drag and drop
         self.image_label.drop_target_register(DND_FILES)
-        self.image_label.dnd_bind('<<Drop>>', self.handle_drop)
+        self.image_label.dnd_bind('<<Drop>>', self._handle_drop)
         
     def _init_text_section(self):
         """Initialize text section UI"""
@@ -142,26 +145,128 @@ class AddOrderView(ttk.Frame):
         self.viewmodel.set_comment_with_picture(self.comment_var.get())
         self.viewmodel.refresh()
 
-    def handle_drop(self, event):
-        """Handle image file drop event"""
-        file_path = event.data
-        # Remove curly braces if present (Windows)
-        file_path = file_path.strip('{}')
-        
-        if file_path.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.bmp')):
-            self.load_image(file_path)
-            self.viewmodel.set_current_image(file_path)
-        else:
-            print("Please drop a valid image file")
+    def _handle_drop(self, event):
+        """Handle file drop event"""
+        try:
+            # Get the dropped file path and remove curly braces if present (Windows)
+            file_path = event.data.strip('{}')
+            
+            # Validate file type
+            if not self._is_valid_image(file_path):
+                self._show_error("Invalid file type. Please drop an image file (PNG, JPG, JPEG, GIF, BMP)")
+                return
+            
+            # Set the image in viewmodel and get extracted text
+            success, extracted_text = self.viewmodel.set_current_image(file_path)
+            
+            if success:
+                # Update the image preview
+                self._update_image_preview(file_path)
+                
+                # If text was extracted, update the order text
+                if extracted_text:
+                    # Try to clean up the text
+                    cleaned_text = self._clean_ocr_text(extracted_text)
+                    
+                    # Clear existing text
+                    self.text_area.delete(1.0, tk.END)
+                    # Insert cleaned text
+                    self.text_area.insert(tk.END, cleaned_text)
+                    
+                    # Show success toast
+                    toast = ToastNotification(
+                        title="OCR Success",
+                        message="Text extracted from image. Please verify the order number and amount.",
+                        duration=5000,  # Show for 5 seconds
+                        bootstyle="success",
+                        position=(80, 50, "se")
+                    )
+                    toast.show_toast()
+                else:
+                    self._show_error("No text could be extracted from the image")
+            else:
+                self._show_error("Failed to process the image")
+                
+        except Exception as e:
+            self._show_error(f"Error processing dropped file: {str(e)}")
 
-    def load_image(self, file_path):
-        """Load and display image"""
+    def _clean_ocr_text(self, text: str) -> str:
+        """
+        Clean up OCR text to better match expected format
+        Order number format: ORDER # xxx-xxxxxxx-xxxxxxx
+        Amount format: $xx.xx or $xxx.xx or $xxxx.xx
+        """
+        try:
+            # Split into lines
+            lines = text.split('\n')
+            
+            order_number = None
+            amount = None
+            
+            # First pass: look for amount and order number
+            for line in lines:
+                line = line.strip().replace("'", "")  # Remove single quotes
+                if not line:
+                    continue
+                
+                # Try to find amount first (it's more reliable)
+                if '$' in line:
+                    # Extract amount using regex
+                    amount_match = re.search(r'\$(\d{2,4}\.\d{2}(?!\d))', line)
+                    if amount_match:
+                        amount = amount_match.group(0)  # Include the $ sign
+                
+                # Try to find order number with flexible matching
+                if 'ORDER' in line.upper() and '#' in line:
+                    # Extract order number using regex
+                    # More flexible pattern matching
+                    order_match = re.search(r'(?:ORDER.*?#|#)\s*(\d{3}-\d{7}-\d{7})', line.upper())
+                    if order_match:
+                        order_number = order_match.group(1)
+            
+            # If we found both order number and amount, combine them
+            if order_number and amount:
+                return f"{order_number} {amount}"
+            
+            # If we only found order number, do another pass for amount
+            if order_number:
+                for line in lines:
+                    amount_match = re.search(r'\$(\d{2,4}\.\d{2}(?!\d))', line)
+                    if amount_match:
+                        amount = amount_match.group(0)
+                        return f"{order_number} {amount}"
+            
+            # If we only found amount, do another pass for order number
+            if amount:
+                for line in lines:
+                    line = line.strip().replace("'", "")
+                    if 'ORDER' in line.upper() and '#' in line:
+                        order_match = re.search(r'(?:ORDER.*?#|#)\s*(\d{3}-\d{7}-\d{7})', line.upper())
+                        if order_match:
+                            order_number = order_match.group(1)
+                            return f"{order_number} {amount}"
+            
+            # If we couldn't process it, return original text
+            return text
+            
+        except Exception as e:
+            print(f"Error cleaning OCR text: {e}")
+            # If cleaning fails, return original text
+            return text
+
+    def _is_valid_image(self, file_path):
+        """Check if the file is a valid image"""
+        return file_path.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.bmp'))
+        
+    def _update_image_preview(self, file_path):
+        """Update the image preview"""
         try:
             # Open and resize image
             image = Image.open(file_path)
+            
             # Calculate resize dimensions while maintaining aspect ratio
-            display_width = 500  # Maximum width for display
-            display_height = 500  # Maximum height for display
+            display_width = 300  # Maximum width for display
+            display_height = 300  # Maximum height for display
             
             # Calculate aspect ratio
             aspect_ratio = image.width / image.height
@@ -175,7 +280,10 @@ class AddOrderView(ttk.Frame):
                 new_height = display_height
                 new_width = int(display_height * aspect_ratio)
             
+            # Resize image
             image = image.resize((new_width, new_height), Image.Resampling.LANCZOS)
+            
+            # Convert to PhotoImage
             photo = ImageTk.PhotoImage(image)
             
             # Update label with image
@@ -183,41 +291,59 @@ class AddOrderView(ttk.Frame):
             self.current_image_display = photo  # Keep a reference
             
         except Exception as e:
-            print(f"Error loading image: {e}")
-    
+            self._show_error(f"Error loading image preview: {str(e)}")
+            
+    def _show_error(self, message):
+        """Show an error message"""
+        toast = ToastNotification(
+            title="Error",
+            message=message,
+            duration=3000,
+            bootstyle="danger",
+            position=(80, 50, "se")  # Bottom right corner
+        )
+        toast.show_toast()
+
     def submit_order(self):
         """Handle order submission"""
         order_text = self.text_area.get("1.0", tk.END).strip()
         note_text = self.note_area.get("1.0", tk.END).strip()
         
-        if order_text:
-            try:
-                # Create order from text
-                order = Order.create_from_text(order_text)
+        if not order_text:
+            self._show_error("Please enter order details")
+            return
+            
+        try:
+            # Create order from text
+            order = self.viewmodel.add_order(order_text)
+            
+            if order:
+                # Show success message
+                toast = ToastNotification(
+                    title="Success",
+                    message="Order added successfully",
+                    duration=3000,
+                    bootstyle="success",
+                    position=(80, 50, "se")
+                )
+                toast.show_toast()
                 
-                # Set note if provided
-                if note_text:
-                    order.note = note_text
-                    
-                # Set image and other properties through viewmodel
-                if self.viewmodel._current_image_path:
-                    new_image_path = self.viewmodel._copy_image_for_order(
-                        order.order_number,
-                        self.viewmodel._current_image_path
-                    )
-                    if new_image_path:
-                        order.image_uri = new_image_path
+                # Clear form
+                self.clear_form()
+            else:
+                self._show_error("Failed to add order")
                 
-                order.comment_with_picture = self.comment_var.get()
-                
-                # Add to database through viewmodel
-                if self.viewmodel.db.insert_order(order):
-                    print("Order added successfully")
-                    self.clear_form()
-                else:
-                    print("Failed to add order")
-            except Exception as e:
-                print(f"Error adding order: {e}")
+        except ValueError as e:
+            # Show more specific error message for validation errors
+            error_msg = str(e)
+            if "Invalid amount format" in error_msg:
+                self._show_error("Please ensure the amount is in the format: 123.45 or $123.45")
+            elif "Order number not found" in error_msg:
+                self._show_error("Please ensure the order number is included")
+            else:
+                self._show_error(f"Error adding order: {error_msg}")
+        except Exception as e:
+            self._show_error(f"Error adding order: {str(e)}")
     
     def clear_form(self):
         """Clear all form fields"""

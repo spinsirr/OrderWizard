@@ -40,30 +40,60 @@ class Order:
         )
 
     @staticmethod
-    def create_from_text(text: str) -> 'Order':
-        """Create an order from text input"""
+    def create_from_text(text: str):
+        """
+        Create an order from text
+        Expected format: Order number followed by amount
+        Example: "123-456-789 $12.34" or "123-456-789 12.34"
+        """
         order = Order(
             order_number=None,
             amount=0.0
         )
-        
-        # Split text into lines and process each line
-        lines = text.strip().split('\n')
-        for line in lines:
-            line = line.strip()
-            if line.startswith('Order #'):
-                order.order_number = line.replace('Order #', '').strip()
-            elif '$' in line:
-                # Extract amount
-                amount_str = line.split('$')[1].strip().replace(',', '')
-                try:
-                    order.amount = float(amount_str)
-                except ValueError:
-                    raise ValueError("Invalid amount format")
-        
-        if not order.order_number:
-            raise ValueError("Order number not found in text")
-        if order.amount <= 0:
-            raise ValueError("Invalid or missing amount")
+        try:
+            # Split text into lines and get the first non-empty line
+            lines = [line.strip() for line in text.split('\n') if line.strip()]
+            if not lines:
+                raise ValueError("No valid text found")
+                
+            # Get the first line
+            first_line = lines[0]
             
-        return order
+            # Try to find order number and amount
+            parts = first_line.split()
+            if len(parts) < 2:
+                raise ValueError("Text must contain both order number and amount")
+            
+            # Get order number (first part)
+            order.order_number = parts[0]
+            
+            # Get amount (last part)
+            amount_str = parts[-1].strip('$')  # Remove $ if present
+            # Remove any commas in the number
+            amount_str = amount_str.replace(',', '')
+            # Convert to float
+            try:
+                order.amount = float(amount_str)
+            except ValueError:
+                raise ValueError("Invalid amount format")
+            
+            # If there are additional lines, use them as note
+            if len(lines) > 1:
+                order.note = '\n'.join(lines[1:])
+            
+            return order
+        except Exception as e:
+            raise ValueError(f"Error creating order: {str(e)}")
+
+    def to_tuple(self):
+        """Convert order to tuple for database storage"""
+        return (
+            self.order_number,
+            self.amount,
+            self.image_uri,
+            self.comment_with_picture,
+            self.commented,
+            self.revealed,
+            self.reimbursed,
+            self.note
+        )
