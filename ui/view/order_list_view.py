@@ -30,14 +30,27 @@ class OrderListView(ttk.Frame):
         header_frame = ttk.Frame(self)
         header_frame.pack(fill=X, pady=(0, 20))
         
+        # Left section frame (for title and total amount)
+        left_section = ttk.Frame(header_frame)
+        left_section.pack(side=LEFT)
+        
         # Title
         title = ttk.Label(
-            header_frame,
+            left_section,
             text="Order List",
             font=("Helvetica", 24, "bold"),
             bootstyle="primary"
         )
-        title.pack(side=LEFT)
+        title.pack(side=TOP, anchor=W)
+        
+        # Total amount label
+        self.total_amount_label = ttk.Label(
+            left_section,
+            text="Total Amount: $0.00",
+            font=("Helvetica", 12),
+            bootstyle="secondary"
+        )
+        self.total_amount_label.pack(side=TOP, anchor=W, pady=(5, 0))
         
         # Search frame (new)
         search_frame = ttk.Frame(header_frame)
@@ -297,6 +310,10 @@ class OrderListView(ttk.Frame):
         """Display orders in the tree view"""
         search_text = self.search_var.get().strip().lower()
         search_type = self.search_type.get()
+        
+        # Calculate total amount
+        total_amount = sum(float(order[2]) for order in orders)
+        self.total_amount_label.configure(text=f"Total Amount: ${total_amount:.2f}")
         
         for order in orders:
             # Check if all status flags are True
