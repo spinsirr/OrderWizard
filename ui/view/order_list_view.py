@@ -1,17 +1,36 @@
 import tkinter as tk
-import ttkbootstrap as ttk
-from ttkbootstrap.constants import *
-from ttkbootstrap.dialogs import Messagebox
-from ttkbootstrap.toast import ToastNotification
+from tkinter import ttk
+from tkinter import messagebox
+import os
+import sys
+import logging
+import platform
+import datetime
 from ui.viewmodel.order_list_viewmodel import OrderListViewModel
 from ui.view.edit_order_view import EditOrderView
+from ui.view.add_order_view import AddOrderView
 from typing import Callable
-import platform
+
+def resource_path(relative_path):
+    """Get absolute path to resource, works for dev and for PyInstaller"""
+    try:
+        # PyInstaller creates a temp folder and stores path in _MEIPASS
+        if getattr(sys, 'frozen', False):
+            base_path = sys._MEIPASS
+            # Check if we're in app bundle on macOS
+            if sys.platform == 'darwin' and os.path.exists(os.path.join(os.path.dirname(sys.executable), '..', 'Resources')):
+                resources_path = os.path.join(os.path.dirname(sys.executable), '..', 'Resources')
+                return os.path.join(resources_path, relative_path)
+            return os.path.join(base_path, relative_path)
+        return os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', relative_path)
+    except Exception as e:
+        logging.error(f"Error getting resource path: {e}")
+        return relative_path
 
 class OrderListView(ttk.Frame):
     def __init__(self, parent, viewmodel: OrderListViewModel, on_add_click: Callable):
-        super().__init__(parent, padding="20")
-        self.parent = parent  # Store parent for toast notifications
+        super().__init__(parent, padding=20)
+        self.parent = parent
         self.viewmodel = viewmodel
         self.on_add_click = on_add_click
         self.edit_window = None
@@ -24,37 +43,35 @@ class OrderListView(ttk.Frame):
     def _init_ui(self):
         """Initialize the UI components"""
         # Configure grid
-        self.pack(fill=BOTH, expand=YES)
+        self.pack(fill=tk.BOTH, expand=True)
         
         # Header frame
         header_frame = ttk.Frame(self)
-        header_frame.pack(fill=X, pady=(0, 20))
+        header_frame.pack(fill=tk.X, pady=(0, 20))
         
         # Left section frame (for title and total amount)
         left_section = ttk.Frame(header_frame)
-        left_section.pack(side=LEFT)
+        left_section.pack(side=tk.LEFT)
         
         # Title
         title = ttk.Label(
             left_section,
             text="Order List",
-            font=("Helvetica", 24, "bold"),
-            bootstyle="primary"
+            font=("Helvetica", 24, "bold")
         )
-        title.pack(side=TOP, anchor=W)
+        title.pack(side=tk.TOP, anchor=tk.W)
         
         # Total amount label
         self.total_amount_label = ttk.Label(
             left_section,
             text="Total Amount: $0.00",
-            font=("Helvetica", 12),
-            bootstyle="secondary"
+            font=("Helvetica", 12)
         )
-        self.total_amount_label.pack(side=TOP, anchor=W, pady=(5, 0))
+        self.total_amount_label.pack(side=tk.TOP, anchor=tk.W, pady=(5, 0))
         
         # Search frame (new)
         search_frame = ttk.Frame(header_frame)
-        search_frame.pack(side=LEFT, padx=20)
+        search_frame.pack(side=tk.LEFT, padx=20)
         
         # Search entry
         self.search_var = tk.StringVar()
@@ -64,7 +81,7 @@ class OrderListView(ttk.Frame):
             textvariable=self.search_var,
             width=30
         )
-        search_entry.pack(side=LEFT, padx=5)
+        search_entry.pack(side=tk.LEFT, padx=5)
         
         # Search type combobox
         self.search_type = ttk.Combobox(
@@ -74,17 +91,16 @@ class OrderListView(ttk.Frame):
             state="readonly"
         )
         self.search_type.set("Order Number")
-        self.search_type.pack(side=LEFT, padx=5)
+        self.search_type.pack(side=tk.LEFT, padx=5)
         self.search_type.bind("<<ComboboxSelected>>", lambda e: self._on_search_change())
         
         # Add Order button
         add_button = ttk.Button(
             header_frame,
             text="Add Order",
-            command=self.on_add_click,
-            bootstyle="success"
+            command=self.on_add_click
         )
-        add_button.pack(side=RIGHT)
+        add_button.pack(side=tk.RIGHT)
         
         # Create Treeview
         columns = (
@@ -101,14 +117,13 @@ class OrderListView(ttk.Frame):
             self,
             columns=columns,
             show="headings",
-            bootstyle="primary",
             height=15  # Show 15 rows at a time
         )
         
         # Configure columns
         for col in columns:
-            self.tree.heading(col, text=col, anchor=W)  # W means West (left) alignment
-            self.tree.column(col, anchor=W)  # Align the content to the left
+            self.tree.heading(col, text=col, anchor=tk.W)  # W means West (left) alignment
+            self.tree.column(col, anchor=tk.W)  # Align the content to the left
         
         # Set column widths
         self.tree.column("ID", width=50)
@@ -125,12 +140,12 @@ class OrderListView(ttk.Frame):
         self.tree.tag_configure('match', background='#FFE5B4')  # Light orange for search matches
         
         # Add scrollbar
-        scrollbar = ttk.Scrollbar(self, orient=VERTICAL, command=self.tree.yview)
+        scrollbar = ttk.Scrollbar(self, orient=tk.VERTICAL, command=self.tree.yview)
         self.tree.configure(yscrollcommand=scrollbar.set)
         
         # Pack tree and scrollbar
-        self.tree.pack(side=LEFT, fill=BOTH, expand=YES)
-        scrollbar.pack(side=RIGHT, fill=Y)
+        self.tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
         
         # Create right-click menu
         self.context_menu = tk.Menu(self, tearoff=0)
@@ -160,16 +175,14 @@ class OrderListView(ttk.Frame):
         
         return "break"  # Prevent propagation
 
-    def _show_toast(self, message: str, bootstyle: str = "success"):
-        """Show a toast notification"""
-        toast = ToastNotification(
-            title="Notification",
-            message=message,
-            duration=1000,  # 1 second
-            bootstyle=bootstyle,
-            position=(80, 50, "se")  # Bottom right corner
-        )
-        toast.show_toast()
+    def _show_message(self, message: str, title: str = "Notification", message_type: str = "info"):
+        """Show a message dialog"""
+        if message_type == "info":
+            messagebox.showinfo(title, message)
+        elif message_type == "warning":
+            messagebox.showwarning(title, message)
+        elif message_type == "error":
+            messagebox.showerror(title, message)
 
     def _handle_click(self, event):
         """Handle left click events"""
@@ -184,8 +197,8 @@ class OrderListView(ttk.Frame):
             self.clipboard_clear()
             self.clipboard_append(order_number)
             
-            # Show toast notification
-            self._show_toast("✓ Order number copied to clipboard", "success")
+            # Show notification
+            self._show_message("Order number copied to clipboard", "Notification", "info")
 
     def _delete_selected_order(self):
         """Delete the selected order"""
@@ -198,46 +211,47 @@ class OrderListView(ttk.Frame):
         order_id = values[0]
         order_number = values[1]
         
-        # Calculate center position for dialog
-        window_x = self.winfo_rootx() + (self.winfo_width() // 2)
-        window_y = self.winfo_rooty() + (self.winfo_height() // 2)
-        
-        # Create custom confirmation dialog
-        dialog = Messagebox.show_question(
-            message=f"Are you sure you want to delete order #{order_number}?",
+        # Create confirmation dialog
+        confirm = messagebox.askyesno(
             title="Confirm Delete",
-            buttons=['No:secondary', 'Yes:danger'],  # Format: text:bootstyle
-            alert=True,
-            parent=self,  # This ensures the dialog is modal to the main window
-            position=(window_x, window_y)  # Center the dialog
+            message=f"Are you sure you want to delete order #{order_number}?"
         )
         
-        if dialog == "Yes":
+        if confirm:
             # Delete the order
             if self.viewmodel.delete_order(order_id):
-                self._show_toast(f"✓ Order #{order_number} successfully deleted", "success")
+                self._show_message(f"Order #{order_number} successfully deleted", "Success", "info")
             else:
-                Messagebox.show_error(
-                    message=f"Failed to delete order #{order_number}",
-                    title="Error",
-                    alert=True,
-                    parent=self,
-                    position=(window_x, window_y)
-                )
+                self._show_message(f"Failed to delete order #{order_number}", "Error", "error")
 
     def _edit_selected_order(self):
         """Edit the selected order"""
         selected_items = self.tree.selection()
         if not selected_items:
             return
-            
-        # Get the order ID
-        order_id = self.tree.item(selected_items[0])["values"][0]
         
-        # Create edit window if not exists
-        if not self.edit_window or not tk.Toplevel.winfo_exists(self.edit_window):
-            self.edit_window = tk.Toplevel(self)
-            self.edit_window.title("Edit Order")
+        # Get the order ID from the selected item
+        values = self.tree.item(selected_items[0])["values"]
+        order_id = values[0]
+        
+        try:
+            logging.info(f"Opening edit window for order ID: {order_id}")
+            
+            # Verify order exists before creating window
+            order_data = self.viewmodel.get_order_by_id(order_id)
+            if not order_data:
+                error_msg = f"Order {order_id} not found in database"
+                logging.error(error_msg)
+                messagebox.showerror("Error", error_msg)
+                return
+            
+            # If we already have an edit window open, close it
+            if hasattr(self, 'edit_window') and self.edit_window:
+                self.edit_window.destroy()
+            
+            # Create a new window for editing
+            self.edit_window = tk.Toplevel(self.parent)
+            self.edit_window.title(f"Edit Order #{order_data[1]}")  # Use order number from verified data
             self.edit_window.geometry("800x600")
             
             # Make it modal
@@ -254,18 +268,28 @@ class OrderListView(ttk.Frame):
             self.edit_window.geometry(f"800x600+{x}+{y}")
             
             # Create edit view
-            EditOrderView(
-                self.edit_window,
-                self.viewmodel,
-                order_id,
-                self._on_edit_window_close
-            )
-            
-            # Make window modal
-            self.edit_window.grab_set()
-            
-            # Show the window in its final position
-            self.edit_window.deiconify()
+            try:
+                EditOrderView(
+                    self.edit_window,
+                    self.viewmodel,
+                    order_id,
+                    self._on_edit_window_close
+                )
+                
+                # Make window modal
+                self.edit_window.grab_set()
+                
+                # Show the window in its final position
+                self.edit_window.deiconify()
+            except Exception as e:
+                logging.error(f"Failed to create EditOrderView: {e}", exc_info=True)
+                messagebox.showerror("Error", f"Failed to open edit window: {str(e)}")
+                if self.edit_window:
+                    self.edit_window.destroy()
+                    self.edit_window = None
+        except Exception as e:
+            logging.error(f"Error in _edit_selected_order: {e}", exc_info=True)
+            messagebox.showerror("Error", f"An error occurred: {str(e)}")
 
     def _on_edit_window_close(self):
         """Handle edit window closing"""
@@ -285,7 +309,7 @@ class OrderListView(ttk.Frame):
         
         if not search_text:
             # If search is empty, show all orders
-            self._display_orders(self.viewmodel.orders)
+            self._display_orders()
             return
             
         filtered_orders = []
@@ -298,59 +322,84 @@ class OrderListView(ttk.Frame):
                 try:
                     search_amount = float(search_text)
                     order_amount = float(order[2])
-                    # Match if amount is within ±3
-                    if abs(search_amount - order_amount) <= 3:
+                    # Match if amount is within ±2
+                    if abs(search_amount - order_amount) <= 2:
                         filtered_orders.append(order)
                 except ValueError:
                     continue
         
         self._display_orders(filtered_orders, highlight_search=True)
 
-    def _display_orders(self, orders, highlight_search=False):
-        """Display orders in the tree view"""
-        search_text = self.search_var.get().strip().lower()
-        search_type = self.search_type.get()
-        
-        # Calculate total amount
-        total_amount = sum(float(order[2]) for order in orders)
-        self.total_amount_label.configure(text=f"Total Amount: ${total_amount:.2f}")
-        
-        for order in orders:
-            # Check if all status flags are True
-            is_completed = all([
-                order[5],  # Commented
-                order[6],  # Revealed
-                order[7]   # Reimbursed
-            ])
+    def _display_orders(self, orders=None, highlight_search=False):
+        """Display orders in the treeview"""
+        try:
+            # Clear existing items
+            for item in self.tree.get_children():
+                self.tree.delete(item)
             
-            tags = []
-            if is_completed:
-                tags.append('completed')
+            # Get orders from ViewModel
+            if orders is None:
+                orders = self.viewmodel.orders
+            logging.info(f"Displaying {len(orders)} orders in the list")
+            
+            search_text = self.search_var.get().strip().lower()
+            search_type = self.search_type.get()
+            
+            # Display orders
+            for index, order in enumerate(orders, 1):  # Start enumeration from 1
+                # Check if order has required fields
+                if len(order) < 11:
+                    logging.warning(f"Invalid order data: {order}")
+                    continue
                 
-            if highlight_search and search_text:
-                if search_type == "Order Number" and search_text in str(order[1]).lower():
-                    tags.append('match')
-                elif search_type == "Amount":
-                    try:
-                        search_amount = float(search_text)
-                        order_amount = float(order[2])
-                        if abs(search_amount - order_amount) <= 3:
-                            tags.append('match')
-                    except ValueError:
-                        pass
+                order_id = order[0]
+                order_number = order[1]
+                
+                # Create tags for highlighting
+                tags = []
+                if search_text:
+                    if search_type == "Order Number" and search_text in str(order_number).lower():
+                        tags.append('match')
+                    elif search_type == "Amount":
+                        try:
+                            search_amount = float(search_text)
+                            order_amount = float(order[2])
+                            if abs(search_amount - order_amount) <= 2:
+                                tags.append('match')
+                        except ValueError:
+                            pass
+                
+                # Add 'completed' tag if all status flags are true
+                if order[5] and order[6] and order[7]:  # commented, revealed, reimbursed
+                    tags.append('completed')
+                
+                note_display = order[9] if order[9] else ""
+                
+                # Insert item with iid explicitly set to order_id as string
+                item_id = self.tree.insert("", tk.END, 
+                    iid=str(order_id),  # Keep the actual order ID as the item identifier
+                    values=(
+                        index,     # Display ID (sequential from 1)
+                        order_number, # Order Number
+                        f"${order[2]:.2f}",  # Amount
+                        note_display,  # Note
+                        "Yes" if order[4] else "No",  # Comment with Picture
+                        "Yes" if order[5] else "No",  # Commented
+                        "Yes" if order[6] else "No",  # Revealed
+                        "Yes" if order[7] else "No"   # Reimbursed
+                    ), 
+                    tags=tuple(tags)
+                )
+                
+                logging.debug(f"Added tree item: {item_id} for order: {order_id}")
             
-            note_display = order[9] if order[9] else ""
+            # Calculate total amount
+            total_amount = sum(float(order[2]) for order in orders)
+            self.total_amount_label.configure(text=f"Total Amount: ${total_amount:.2f}")
             
-            self.tree.insert("", END, values=(
-                order[0],  # ID
-                order[1],  # Order Number
-                f"${order[2]:.2f}",  # Amount
-                note_display,  # Note
-                "Yes" if order[4] else "No",  # Comment with Picture
-                "Yes" if order[5] else "No",  # Commented
-                "Yes" if order[6] else "No",  # Revealed
-                "Yes" if order[7] else "No"   # Reimbursed
-            ), tags=tuple(tags))
+        except Exception as e:
+            logging.error(f"Error displaying orders: {e}", exc_info=True)
+            messagebox.showerror("Error", f"Failed to load orders: {str(e)}")
 
     def update_ui(self):
         """Update the UI with current data"""
@@ -367,7 +416,24 @@ class OrderListView(ttk.Frame):
 
     def _handle_double_click(self, event):
         """Handle double click events"""
-        item = self.tree.identify_row(event.y)
-        if item:
-            self._edit_selected_order()
-            return "break"  # Prevent event propagation 
+        try:
+            item_id = self.tree.identify_row(event.y)
+            if item_id:
+                logging.info(f"Double-clicked on item: {item_id}")
+                
+                # Get the order ID directly from the item ID if possible
+                try:
+                    order_id = int(item_id)
+                    logging.info(f"Using item ID as order ID: {order_id}")
+                except ValueError:
+                    # Fall back to getting the ID from the values
+                    values = self.tree.item(item_id)["values"]
+                    order_id = values[0]
+                    logging.info(f"Using values[0] as order ID: {order_id}")
+                    
+                # Now proceed with opening the edit window
+                self._edit_selected_order()
+                return "break"  # Prevent event propagation
+        except Exception as e:
+            logging.error(f"Error handling double click: {e}", exc_info=True)
+            messagebox.showerror("Error", f"Error processing double click: {str(e)}") 

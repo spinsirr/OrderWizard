@@ -2,25 +2,49 @@ import os
 import sys
 import logging
 import traceback
+import tkinter as tk
+from tkinter import ttk
+from tkinter import messagebox
 from pathlib import Path
-from tkinterdnd2 import TkinterDnD
-import ttkbootstrap as ttk
+import threading
+
+try:
+    from tkinterdnd2 import DND_FILES, TkinterDnD
+except ImportError:
+    logging.warning("tkinterdnd2 not available, drag and drop will be disabled")
+    DND_FILES = None
+    TkinterDnD = tk.Tk
+
 from ui.view.add_order_view import AddOrderView
 from ui.view.order_list_view import OrderListView
 from ui.viewmodel.order_list_viewmodel import OrderListViewModel
 
+def resource_path(relative_path):
+    """Get absolute path to resource, works for dev and for PyInstaller"""
+    try:
+        # PyInstaller creates a temp folder and stores path in _MEIPASS
+        if getattr(sys, 'frozen', False):
+            base_path = sys._MEIPASS
+            # Check if we're in app bundle on macOS
+            if sys.platform == 'darwin' and os.path.exists(os.path.join(os.path.dirname(sys.executable), '..', 'Resources')):
+                resources_path = os.path.join(os.path.dirname(sys.executable), '..', 'Resources')
+                return os.path.join(resources_path, relative_path)
+            return os.path.join(base_path, relative_path)
+        return os.path.join(os.path.dirname(os.path.abspath(__file__)), relative_path)
+    except Exception as e:
+        logging.error(f"Error getting resource path: {e}")
+        return relative_path
+
 # Configure logging
 if getattr(sys, 'frozen', False):
     # we are running in a bundle
-    bundle_dir = sys._MEIPASS
     # Use user's home directory for logs when bundled
     log_dir = os.path.expanduser('~/Library/Logs/OrderWizard')
     os.makedirs(log_dir, exist_ok=True)
     log_file = os.path.join(log_dir, 'orderwizard.log')
 else:
     # we are running in a normal Python environment
-    bundle_dir = os.path.dirname(os.path.abspath(__file__))
-    log_file = os.path.join(bundle_dir, 'orderwizard.log')
+    log_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'orderwizard.log')
 
 logging.basicConfig(
     filename=log_file,
@@ -34,34 +58,6 @@ if not getattr(sys, 'frozen', False):
     console_handler.setLevel(logging.DEBUG)
     logging.getLogger().addHandler(console_handler)
 
-def setup_tkdnd():
-    """Setup tkdnd library paths"""
-    try:
-        logging.info("Setting up tkdnd paths")
-        if getattr(sys, 'frozen', False):
-            # If we're running in a bundle
-            tkdnd_path = os.path.join(bundle_dir, 'tkinterdnd2', 'tkdnd')
-            os.environ['TKDND_LIBRARY'] = tkdnd_path
-            logging.info(f"Set TKDND_LIBRARY to: {tkdnd_path}")
-            
-            # Also set TCL/TK library paths
-            tcl_lib = os.path.join(bundle_dir, 'lib', 'tcl8.6')
-            tk_lib = os.path.join(bundle_dir, 'lib', 'tk8.6')
-            os.environ['TCL_LIBRARY'] = tcl_lib
-            os.environ['TK_LIBRARY'] = tk_lib
-            logging.info(f"Set TCL_LIBRARY to: {tcl_lib}")
-            logging.info(f"Set TK_LIBRARY to: {tk_lib}")
-        else:
-            # Running in development
-            import tkinterdnd2
-            tkdnd_path = os.path.join(os.path.dirname(tkinterdnd2.__file__), 'tkdnd')
-            os.environ['TKDND_LIBRARY'] = tkdnd_path
-            logging.info(f"Set TKDND_LIBRARY to: {tkdnd_path}")
-    except Exception as e:
-        logging.error(f"Error setting up tkdnd: {e}")
-        logging.error(traceback.format_exc())
-        raise
-
 class MainApplication:
     def __init__(self, root):
         try:
@@ -70,21 +66,64 @@ class MainApplication:
             self.root.title("Order Wizard")
             self.root.geometry("1200x800")
             
-            logging.info("Setting up ttkbootstrap style")
-            self.root.style = ttk.Style(theme="cosmo")
+            # Log resource paths
+            logging.info(f"DB Path: {resource_path('db/orders.db')}")
+            logging.info(f"Images Path: {resource_path('images')}")
             
-            # Initialize shared ViewModel
-            logging.info("Initializing OrderListViewModel")
-            self.order_list_viewmodel = OrderListViewModel()
+            # Add a loading label
+            self.loading_label = ttk.Label(
+                self.root,
+                text="Loading...",
+                font=("Helvetica", 18)
+            )
+            self.loading_label.pack(expand=True)
             
+            # Initialize ViewModel in a separate thread
+            self.order_list_viewmodel = None
             self.current_screen = None
-            logging.info("Showing initial order list screen")
-            self.show_order_list()
+            threading.Thread(target=self._initialize_viewmodel, daemon=True).start()
             
         except Exception as e:
             logging.error(f"Error in MainApplication initialization: {e}")
             logging.error(traceback.format_exc())
+            messagebox.showerror("Initialization Error", f"Error initializing application: {e}")
             raise
+    
+    def _initialize_viewmodel(self):
+        """Initialize the ViewModel in a background thread"""
+        try:
+            # Initialize shared ViewModel
+            logging.info("Initializing OrderListViewModel")
+            self.order_list_viewmodel = OrderListViewModel()
+            
+            # Schedule UI update on the main thread
+            self.root.after(100, self._finish_initialization)
+        except Exception as e:
+            logging.error(f"Error initializing ViewModel: {e}")
+            self.root.after(0, lambda: messagebox.showerror("Initialization Error", f"Error initializing application: {e}"))
+    
+    def _finish_initialization(self):
+        """Complete initialization on the main thread"""
+        if self.order_list_viewmodel:
+            # Remove loading label
+            self.loading_label.pack_forget()
+            
+            # Show the initial screen
+            logging.info("Showing initial order list screen")
+            self.show_order_list()
+            
+            # Load orders in background after UI is shown
+            threading.Thread(target=self._load_orders_background, daemon=True).start()
+        else:
+            # Check again in 100ms
+            self.root.after(100, self._finish_initialization)
+    
+    def _load_orders_background(self):
+        """Load orders in the background and update UI when done"""
+        try:
+            self.order_list_viewmodel.load_orders()
+        except Exception as e:
+            logging.error(f"Error loading orders: {e}")
         
     def show_order_list(self):
         """Show the order list screen"""
@@ -96,6 +135,7 @@ class MainApplication:
         except Exception as e:
             logging.error(f"Error showing order list: {e}")
             logging.error(traceback.format_exc())
+            messagebox.showerror("View Error", f"Error showing order list: {e}")
             raise
         
     def show_add_order(self):
@@ -109,53 +149,83 @@ class MainApplication:
             back_button = ttk.Button(
                 self.current_screen.button_frame,
                 text="Back to List",
-                command=self.show_order_list,
-                bootstyle="secondary"
+                command=self.show_order_list
             )
             back_button.pack(side="left")
         except Exception as e:
             logging.error(f"Error showing add order screen: {e}")
             logging.error(traceback.format_exc())
+            messagebox.showerror("View Error", f"Error showing add order screen: {e}")
             raise
-
-def initialize_app():
-    """Initialize the application and its dependencies"""
-    try:
-        logging.info("Starting application initialization")
-        
-        # Setup tkdnd
-        setup_tkdnd()
-        
-        # Initialize root window
-        logging.info("Creating root window")
-        root = TkinterDnD.Tk()
-        
-        # Create main application
-        logging.info("Creating main application")
-        app = MainApplication(root)
-        
-        logging.info("Application initialized successfully")
-        return root, app
-    except Exception as e:
-        logging.error(f"Failed to initialize application: {e}")
-        logging.error(traceback.format_exc())
-        sys.exit(1)
 
 def main():
     try:
-        logging.info("Starting main application")
-        root, app = initialize_app()
-        logging.info("Entering main event loop")
-        root.mainloop()
+        logging.info("Starting application")
+        logging.info("Creating root window")
+        root = TkinterDnD.Tk()  # Use TkinterDnD instead of tk.Tk
+        root.withdraw()  # Hide the window initially
+        
+        # Set app icon (faster loading)
+        if sys.platform == 'darwin':
+            # Skip setting icon on macOS to speed up startup
+            pass
+        
+        # Show a basic splash screen first
+        splash = tk.Toplevel(root)
+        splash.title("Loading OrderWizard")
+        splash.geometry("400x200")
+        splash.overrideredirect(True)  # Remove window decorations
+        
+        # Center splash screen
+        screen_width = splash.winfo_screenwidth()
+        screen_height = splash.winfo_screenheight()
+        x = (screen_width - 400) // 2
+        y = (screen_height - 200) // 2
+        splash.geometry(f"400x200+{x}+{y}")
+        
+        splash_label = ttk.Label(
+            splash,
+            text="OrderWizard",
+            font=("Helvetica", 24, "bold")
+        )
+        splash_label.pack(pady=(50, 20))
+        
+        splash_sublabel = ttk.Label(
+            splash,
+            text="Starting...",
+            font=("Helvetica", 12)
+        )
+        splash_sublabel.pack()
+        
+        # Force update to show splash
+        splash.update()
+        
+        # Check database connection
+        try:
+            logging.info("Initializing application")
+            app = MainApplication(root)
+            
+            # Close splash and show main window
+            splash.destroy()
+            root.deiconify()  # Show the window after initialization
+            
+            logging.info("Entering main event loop")
+            root.mainloop()
+        except Exception as e:
+            splash.destroy()  # Ensure splash is closed on error
+            logging.error(f"Application initialization error: {e}")
+            logging.error(traceback.format_exc())
+            messagebox.showerror("Initialization Error", f"Failed to initialize application: {e}")
+            sys.exit(1)
     except Exception as e:
-        logging.error(f"Application error: {e}")
+        logging.error(f"Application startup error: {e}")
         logging.error(traceback.format_exc())
+        try:
+            messagebox.showerror("Startup Error", f"Application failed to start: {e}")
+        except:
+            pass
         sys.exit(1)
 
+# Improve startup speed by avoiding slow module imports until needed
 if __name__ == "__main__":
-    try:
-        main()
-    except Exception as e:
-        logging.error(f"Fatal error in main: {e}")
-        logging.error(traceback.format_exc())
-        sys.exit(1) 
+    main() 

@@ -1,10 +1,48 @@
-from db.database import Database
+from db.database import Database, get_user_data_dir
 from model.order import Order
 from typing import List, Tuple, Optional, Callable
 from PIL import Image
 import os
+import sys
 import shutil
-import pytesseract
+import threading
+import logging
+import time
+
+# Lazy import pytesseract to improve startup speed
+pytesseract = None
+
+def load_pytesseract():
+    """Lazy load pytesseract only when needed"""
+    global pytesseract
+    if pytesseract is None:
+        try:
+            import pytesseract as pt
+            pytesseract = pt
+        except ImportError as e:
+            logging.error(f"Failed to import pytesseract: {e}")
+            return False
+    return True
+
+def resource_path(relative_path):
+    """Get absolute path to resource, works for dev and for PyInstaller"""
+    try:
+        # Check if we should use user data directory for images
+        if relative_path.startswith('images/'):
+            return os.path.join(get_user_data_dir(), relative_path)
+            
+        # PyInstaller creates a temp folder and stores path in _MEIPASS
+        if getattr(sys, 'frozen', False):
+            base_path = sys._MEIPASS
+            # Check if we're in app bundle on macOS
+            if sys.platform == 'darwin' and os.path.exists(os.path.join(os.path.dirname(sys.executable), '..', 'Resources')):
+                resources_path = os.path.join(os.path.dirname(sys.executable), '..', 'Resources')
+                return os.path.join(resources_path, relative_path)
+            return os.path.join(base_path, relative_path)
+        return os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', relative_path)
+    except Exception as e:
+        logging.error(f"Error getting resource path: {e}")
+        return relative_path
 
 class OrderListViewModel:
     def __init__(self):
@@ -14,10 +52,16 @@ class OrderListViewModel:
         self._current_image = None
         self._current_image_path = None
         self._comment_with_picture = False
+        self._ocr_results = {}  # Cache for OCR results
+        self._ocr_callbacks = {}  # Callbacks for when OCR completes
+        self._ocr_lock = threading.Lock()
         
-        # Ensure images directory exists
-        self.images_dir = "images"
+        # Ensure images directory exists in user data directory
+        self.images_dir = os.path.join(get_user_data_dir(), 'images')
         os.makedirs(self.images_dir, exist_ok=True)
+        
+        # Start background thread to preload pytesseract
+        threading.Thread(target=load_pytesseract, daemon=True).start()
 
     def load_orders(self):
         """Load orders from database"""
@@ -25,7 +69,7 @@ class OrderListViewModel:
             self._orders = self.db.get_all_orders()
             self._notify_data_changed()
         except Exception as e:
-            print(f"Error loading orders: {e}")
+            logging.error(f"Error loading orders: {e}")
 
     @property
     def orders(self) -> List[Tuple]:
@@ -69,14 +113,14 @@ class OrderListViewModel:
                     if os.path.exists(order[3]):
                         os.remove(order[3])
                 except Exception as e:
-                    print(f"Error deleting image file: {e}")
+                    logging.error(f"Error deleting image file: {e}")
             
             # Refresh the orders list
             self.load_orders()
             return True
             
         except Exception as e:
-            print(f"Error deleting order: {e}")
+            logging.error(f"Error deleting order: {e}")
             return False
 
     def _copy_image_for_order(self, order_number: str, source_path: str) -> Optional[str]:
@@ -103,7 +147,7 @@ class OrderListViewModel:
             
             return dest_path
         except Exception as e:
-            print(f"Error copying image: {e}")
+            logging.error(f"Error copying image: {e}")
             return None
 
     def add_order(self, order_text: str) -> Optional[Order]:
@@ -143,8 +187,79 @@ class OrderListViewModel:
                 
             return None
         except Exception as e:
-            print(f"Error adding order: {e}")
+            logging.error(f"Error adding order: {e}")
             return None
+
+    def _perform_ocr(self, image_path: str, callback=None):
+        """
+        Perform OCR in a background thread
+        
+        Args:
+            image_path: Path to the image file
+            callback: Function to call with results
+        """
+        threading.Thread(
+            target=self._ocr_thread,
+            args=(image_path, callback),
+            daemon=True
+        ).start()
+        
+    def _ocr_thread(self, image_path: str, callback=None):
+        """
+        Thread function for OCR processing
+        
+        Args:
+            image_path: Path to the image file
+            callback: Function to call with results
+        """
+        if not load_pytesseract():
+            if callback:
+                callback(False, "Could not load OCR library")
+            return
+            
+        try:
+            # Check if we already have results for this image
+            with self._ocr_lock:
+                if image_path in self._ocr_results:
+                    if callback:
+                        callback(True, self._ocr_results[image_path])
+                    return
+                    
+            # Open the image
+            image = Image.open(image_path)
+            
+            # Convert PNG with transparency to RGB
+            if image.mode == 'RGBA':
+                # Create a white background image
+                background = Image.new('RGB', image.size, (255, 255, 255))
+                # Paste the image on the background
+                background.paste(image, mask=image.split()[3])  # 3 is the alpha channel
+                image = background
+            elif image.mode != 'RGB':
+                image = image.convert('RGB')
+            
+            # Extract text using pytesseract
+            text = pytesseract.image_to_string(image)
+            
+            # Clean up the extracted text
+            text = text.strip()
+            
+            # Cache the result
+            with self._ocr_lock:
+                self._ocr_results[image_path] = text
+                
+            # Log the result
+            logging.info(f"OCR Result from {image_path}:")
+            logging.info(text)
+            
+            # Call callback with result
+            if callback:
+                callback(True, text)
+                
+        except Exception as e:
+            logging.error(f"Error extracting text from image: {e}")
+            if callback:
+                callback(False, str(e))
 
     def extract_text_from_image(self, image_path: str) -> str:
         """
@@ -156,6 +271,14 @@ class OrderListViewModel:
         Returns:
             str: Extracted text from the image
         """
+        # For immediate return without waiting for threading
+        if image_path in self._ocr_results:
+            return self._ocr_results[image_path]
+            
+        # Synchronous fallback mode for rapid startup
+        if not load_pytesseract():
+            return ""
+            
         try:
             # Open the image
             image = Image.open(image_path)
@@ -170,22 +293,23 @@ class OrderListViewModel:
             elif image.mode != 'RGB':
                 image = image.convert('RGB')
             
-            # Optionally enhance image for better OCR results
-            # image = image.filter(ImageFilter.SHARPEN)
-            
             # Extract text using pytesseract
             text = pytesseract.image_to_string(image)
             
             # Clean up the extracted text
             text = text.strip()
             
+            # Cache the result
+            with self._ocr_lock:
+                self._ocr_results[image_path] = text
+            
             # Log the result
-            print(f"OCR Result from {image_path}:")
-            print(text)
+            logging.info(f"OCR Result from {image_path}:")
+            logging.info(text)
             
             return text
         except Exception as e:
-            print(f"Error extracting text from image: {e}")
+            logging.error(f"Error extracting text from image: {e}")
             return ""
 
     def set_current_image(self, image_path: str) -> Tuple[bool, Optional[str]]:
@@ -200,12 +324,39 @@ class OrderListViewModel:
         """
         try:
             self._current_image_path = image_path
-            # Extract text from the image
-            extracted_text = self.extract_text_from_image(image_path)
-            return True, extracted_text
+            
+            # If we already have OCR results for this image, return them immediately
+            if image_path in self._ocr_results:
+                return True, self._ocr_results[image_path]
+                
+            # Start OCR in background
+            self._perform_ocr(image_path)
+            
+            # Return success but with empty text (the UI will be updated later)
+            return True, ""
         except Exception as e:
-            print(f"Error setting image: {e}")
+            logging.error(f"Error setting image: {e}")
             return False, None
+
+    def set_ocr_callback(self, image_path: str, callback: Callable):
+        """
+        Set a callback for when OCR completes
+        
+        Args:
+            image_path: Path to the image file
+            callback: Function to call with results
+        """
+        # If we already have results, call callback immediately
+        if image_path in self._ocr_results:
+            callback(True, self._ocr_results[image_path])
+            return
+            
+        # Otherwise store callback and start OCR
+        with self._ocr_lock:
+            self._ocr_callbacks[image_path] = callback
+            
+        # Start OCR in background
+        self._perform_ocr(image_path, callback)
 
     def set_comment_with_picture(self, has_comment: bool):
         """Set whether the current order has a comment with the picture"""
@@ -239,11 +390,40 @@ class OrderListViewModel:
             tuple: Order data if found, None otherwise
         """
         try:
-            return self.db.get_order_by_id(order_id)
-        except Exception as e:
-            print(f"Error getting order: {e}")
-            return None
+            logging.info(f"Fetching order with ID: {order_id}")
             
+            # Attempt to get from database
+            order_data = self.db.get_order_by_id(order_id)
+            
+            if order_data:
+                logging.info(f"Order found in database: {order_data[0]}, {order_data[1]}")
+                return order_data
+            
+            # If not found, log detailed information and try refreshing
+            logging.warning(f"Order {order_id} not found in database, refreshing orders list")
+            self.refresh()  # Refresh orders from database
+            
+            # Try again after refresh
+            order_data = self.db.get_order_by_id(order_id)
+            if order_data:
+                logging.info(f"Order found after refresh: {order_data[0]}, {order_data[1]}")
+                return order_data
+                
+            # If still not found, check _orders list for debugging
+            order_ids = [order[0] for order in self._orders]
+            logging.error(f"Order {order_id} not found even after refresh. Available IDs: {order_ids}")
+            
+            # Final fallback: manually search in _orders list
+            for order in self._orders:
+                if order[0] == order_id:
+                    logging.info(f"Order found in local cache: {order[0]}, {order[1]}")
+                    return order
+                    
+            return None
+        except Exception as e:
+            logging.error(f"Error getting order: {e}", exc_info=True)
+            return None
+
     def update_order(self, order_id: int, order: Order) -> bool:
         """
         Update an existing order
@@ -261,7 +441,7 @@ class OrderListViewModel:
                 return True
             return False
         except Exception as e:
-            print(f"Error updating order: {e}")
+            logging.error(f"Error updating order: {e}")
             return False
 
     def __del__(self):
