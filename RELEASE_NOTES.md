@@ -1,4 +1,22 @@
-# OrderWizard v1.0.0 Release Notes
+# OrderWizard v1.0.1 Release Notes
+
+## UI Improvements
+1. Edit Window
+   - Auto-close after successful save
+   - Better feedback for save operations
+
+2. Order List View
+   - Improved readability for completed orders
+   - Black text on green background for better contrast
+
+## Bug Fixes
+- Fixed order number search functionality
+- Improved database query performance
+- Enhanced error handling
+
+## Previous Versions
+
+# OrderWizard v1.0.0
 
 ## New Features
 1. Order Management System
