@@ -206,23 +206,38 @@ class OrderListView(ttk.Frame):
         if not selected_items:
             return
             
-        # Get the order data
-        values = self.tree.item(selected_items[0])["values"]
-        order_id = values[0]
-        order_number = values[1]
-        
-        # Create confirmation dialog
-        confirm = messagebox.askyesno(
-            title="Confirm Delete",
-            message=f"Are you sure you want to delete order #{order_number}?"
-        )
-        
-        if confirm:
-            # Delete the order
-            if self.viewmodel.delete_order(order_id):
-                self._show_message(f"Order #{order_number} successfully deleted", "Success", "info")
-            else:
-                self._show_message(f"Failed to delete order #{order_number}", "Error", "error")
+        try:
+            # Get the actual order_id from the tree item's iid
+            order_id = int(selected_items[0])  # selected_items[0] is the iid we set earlier
+            logging.info(f"Deleting order - Selected Tree IID: {selected_items[0]}, Parsed Database ID: {order_id}")
+            
+            # Get order data using order ID directly
+            order = self.viewmodel.get_order_by_id(order_id)
+            if not order:
+                error_msg = f"Order ID {order_id} not found in database"
+                logging.error(error_msg)
+                messagebox.showerror("Error", error_msg)
+                return
+                
+            logging.info(f"Retrieved order for deletion - Database ID: {order.id}, Order Number: {order.order_number}")
+            
+            # Create confirmation dialog
+            confirm = messagebox.askyesno(
+                title="Confirm Delete",
+                message=f"Are you sure you want to delete order #{order.order_number}?"
+            )
+            
+            if confirm:
+                # Delete the order
+                if self.viewmodel.delete_order(order_id):
+                    logging.info(f"Successfully deleted order - Database ID: {order_id}, Order Number: {order.order_number}")
+                    self._show_message(f"Order #{order.order_number} successfully deleted", "Success", "info")
+                else:
+                    logging.error(f"Failed to delete order - Database ID: {order_id}, Order Number: {order.order_number}")
+                    self._show_message(f"Failed to delete order #{order.order_number}", "Error", "error")
+        except Exception as e:
+            logging.error(f"Error in _delete_selected_order: {e}", exc_info=True)
+            messagebox.showerror("Error", f"An error occurred: {str(e)}")
 
     def _edit_selected_order(self):
         """Edit the selected order"""
@@ -230,20 +245,20 @@ class OrderListView(ttk.Frame):
         if not selected_items:
             return
         
-        # Get the order ID from the selected item
-        values = self.tree.item(selected_items[0])["values"]
-        order_id = values[0]
-        
         try:
-            logging.info(f"Opening edit window for order ID: {order_id}")
+            # Get the actual order_id from the tree item's iid
+            order_id = int(selected_items[0])  # selected_items[0] is the iid we set earlier
+            logging.info(f"Editing order - Selected Tree IID: {selected_items[0]}, Parsed Database ID: {order_id}")
             
-            # Verify order exists before creating window
-            order_data = self.viewmodel.get_order_by_id(order_id)
-            if not order_data:
-                error_msg = f"Order {order_id} not found in database"
+            # Get order data using order ID directly
+            order = self.viewmodel.get_order_by_id(order_id)
+            if not order:
+                error_msg = f"Order ID {order_id} not found in database"
                 logging.error(error_msg)
                 messagebox.showerror("Error", error_msg)
                 return
+                
+            logging.info(f"Retrieved order for editing - Database ID: {order.id}, Order Number: {order.order_number}")
             
             # If we already have an edit window open, close it
             if hasattr(self, 'edit_window') and self.edit_window:
@@ -251,7 +266,7 @@ class OrderListView(ttk.Frame):
             
             # Create a new window for editing
             self.edit_window = tk.Toplevel(self.parent)
-            self.edit_window.title(f"Edit Order #{order_data[1]}")  # Use order number from verified data
+            self.edit_window.title(f"Edit Order #{order.order_number}")  # Use order number for title
             self.edit_window.geometry("800x600")
             
             # Make it modal
@@ -272,9 +287,10 @@ class OrderListView(ttk.Frame):
                 EditOrderView(
                     self.edit_window,
                     self.viewmodel,
-                    order_id,
+                    order_id,  # Pass the actual order_id
                     self._on_edit_window_close
                 )
+                logging.info(f"Created EditOrderView for order - Database ID: {order_id}, Order Number: {order.order_number}")
                 
                 # Make window modal
                 self.edit_window.grab_set()
@@ -316,17 +332,19 @@ class OrderListView(ttk.Frame):
         for order in self.viewmodel.orders:
             if search_type == "Order Number":
                 # Search in order number (partial match)
-                if search_text.lower() in str(order[1]).lower():
+                if search_text.lower() in str(order.order_number).lower():
                     filtered_orders.append(order)
             else:  # Amount search
                 try:
                     search_amount = float(search_text)
-                    order_amount = float(order[2])
                     # Match if amount is within ±2
-                    if abs(search_amount - order_amount) <= 2:
+                    if abs(search_amount - order.amount) <= 2:
                         filtered_orders.append(order)
                 except ValueError:
                     continue
+        
+        # Log search results
+        logging.info(f"Search found {len(filtered_orders)} orders matching '{search_text}' in {search_type}")
         
         self._display_orders(filtered_orders, highlight_search=True)
 
@@ -347,54 +365,47 @@ class OrderListView(ttk.Frame):
             
             # Display orders
             for index, order in enumerate(orders, 1):  # Start enumeration from 1
-                # Check if order has required fields
-                if len(order) < 11:
-                    logging.warning(f"Invalid order data: {order}")
-                    continue
-                
-                order_id = order[0]
-                order_number = order[1]
+                logging.info(f"Processing order - Database ID: {order.id}, Display Index: {index}, Order Number: {order.order_number}")
                 
                 # Create tags for highlighting
                 tags = []
                 if search_text:
-                    if search_type == "Order Number" and search_text in str(order_number).lower():
+                    if search_type == "Order Number" and search_text in str(order.order_number).lower():
                         tags.append('match')
                     elif search_type == "Amount":
                         try:
                             search_amount = float(search_text)
-                            order_amount = float(order[2])
-                            if abs(search_amount - order_amount) <= 2:
+                            if abs(search_amount - order.amount) <= 2:
                                 tags.append('match')
                         except ValueError:
                             pass
                 
                 # Add 'completed' tag if all status flags are true
-                if order[5] and order[6] and order[7]:  # commented, revealed, reimbursed
+                if order.commented and order.revealed and order.reimbursed:
                     tags.append('completed')
                 
-                note_display = order[9] if order[9] else ""
+                note_display = order.note if order.note else ""
                 
                 # Insert item with iid explicitly set to order_id as string
-                item_id = self.tree.insert("", tk.END, 
-                    iid=str(order_id),  # Keep the actual order ID as the item identifier
+                self.tree.insert("", tk.END, 
+                    iid=str(order.id),  # Use the actual order_id as the iid
                     values=(
                         index,     # Display ID (sequential from 1)
-                        order_number, # Order Number
-                        f"${order[2]:.2f}",  # Amount
+                        order.order_number, # Order Number
+                        f"${order.amount:.2f}",  # Amount
                         note_display,  # Note
-                        "Yes" if order[4] else "No",  # Comment with Picture
-                        "Yes" if order[5] else "No",  # Commented
-                        "Yes" if order[6] else "No",  # Revealed
-                        "Yes" if order[7] else "No"   # Reimbursed
+                        "Yes" if order.comment_with_picture else "No",  # Comment with Picture
+                        "Yes" if order.commented else "No",  # Commented
+                        "Yes" if order.revealed else "No",  # Revealed
+                        "Yes" if order.reimbursed else "No"   # Reimbursed
                     ), 
                     tags=tuple(tags)
                 )
                 
-                logging.debug(f"Added tree item: {item_id} for order: {order_id}")
+                logging.info(f"Added tree item - Database ID: {order.id}, Display Index: {index}, Order Number: {order.order_number}")
             
             # Calculate total amount
-            total_amount = sum(float(order[2]) for order in orders)
+            total_amount = sum(order.amount for order in orders)
             self.total_amount_label.configure(text=f"Total Amount: ${total_amount:.2f}")
             
         except Exception as e:
@@ -420,18 +431,6 @@ class OrderListView(ttk.Frame):
             item_id = self.tree.identify_row(event.y)
             if item_id:
                 logging.info(f"Double-clicked on item: {item_id}")
-                
-                # Get the order ID directly from the item ID if possible
-                try:
-                    order_id = int(item_id)
-                    logging.info(f"Using item ID as order ID: {order_id}")
-                except ValueError:
-                    # Fall back to getting the ID from the values
-                    values = self.tree.item(item_id)["values"]
-                    order_id = values[0]
-                    logging.info(f"Using values[0] as order ID: {order_id}")
-                    
-                # Now proceed with opening the edit window
                 self._edit_selected_order()
                 return "break"  # Prevent event propagation
         except Exception as e:

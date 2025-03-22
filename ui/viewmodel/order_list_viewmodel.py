@@ -19,6 +19,19 @@ def load_pytesseract():
         try:
             import pytesseract as pt
             pytesseract = pt
+            
+            # Set Tesseract path explicitly for macOS
+            if sys.platform == 'darwin':
+                pytesseract.pytesseract.tesseract_cmd = '/opt/homebrew/bin/tesseract'
+            
+            # Test if Tesseract is working
+            try:
+                pytesseract.get_tesseract_version()
+                logging.info("Tesseract initialized successfully")
+                return True
+            except Exception as e:
+                logging.error(f"Tesseract test failed: {e}")
+                return False
         except ImportError as e:
             logging.error(f"Failed to import pytesseract: {e}")
             return False
@@ -47,7 +60,7 @@ def resource_path(relative_path):
 class OrderListViewModel:
     def __init__(self):
         self.db = Database()
-        self._orders: List[Tuple] = []
+        self._orders: List[Order] = []
         self._on_data_changed: Optional[Callable] = None
         self._current_image = None
         self._current_image_path = None
@@ -66,13 +79,29 @@ class OrderListViewModel:
     def load_orders(self):
         """Load orders from database"""
         try:
-            self._orders = self.db.get_all_orders()
+            # Get orders from database and convert to Order objects
+            orders_data = self.db.get_all_orders()
+            self._orders = []
+            for order_data in orders_data:
+                order = Order(
+                    id=order_data[0],
+                    order_number=order_data[1],
+                    amount=order_data[2],
+                    image_uri=order_data[3],
+                    comment_with_picture=order_data[4],
+                    commented=order_data[5],
+                    revealed=order_data[6],
+                    reimbursed=order_data[7],
+                    reimbursed_amount=order_data[8],
+                    note=order_data[9]
+                )
+                self._orders.append(order)
             self._notify_data_changed()
         except Exception as e:
             logging.error(f"Error loading orders: {e}")
 
     @property
-    def orders(self) -> List[Tuple]:
+    def orders(self) -> List[Order]:
         """Get current orders"""
         return self._orders
 
@@ -101,17 +130,17 @@ class OrderListViewModel:
         """
         try:
             # Get the order before deleting (to get image path)
-            order = next((o for o in self._orders if o[0] == order_id), None)
+            order = next((o for o in self._orders if o.id == order_id), None)
             
             # Delete from database
             if not self.db.remove_order(order_id):
                 return False
                 
             # If order had an image, delete it
-            if order and order[3]:  # image_uri
+            if order and order.image_uri:  # image_uri
                 try:
-                    if os.path.exists(order[3]):
-                        os.remove(order[3])
+                    if os.path.exists(order.image_uri):
+                        os.remove(order.image_uri)
                 except Exception as e:
                     logging.error(f"Error deleting image file: {e}")
             
@@ -379,49 +408,84 @@ class OrderListViewModel:
         """Get the current image path"""
         return self._current_image_path
 
-    def get_order_by_id(self, order_id: int) -> Optional[tuple]:
+    def get_order_by_id(self, order_id: int) -> Optional[Order]:
         """
-        Get order data by ID
+        Get an order by its ID
         
         Args:
-            order_id: The ID of the order to retrieve
+            order_id: The ID of the order to get
             
         Returns:
-            tuple: Order data if found, None otherwise
+            Order: The order if found, None otherwise
         """
         try:
-            logging.info(f"Fetching order with ID: {order_id}")
-            
-            # Attempt to get from database
-            order_data = self.db.get_order_by_id(order_id)
-            
-            if order_data:
-                logging.info(f"Order found in database: {order_data[0]}, {order_data[1]}")
-                return order_data
-            
-            # If not found, log detailed information and try refreshing
-            logging.warning(f"Order {order_id} not found in database, refreshing orders list")
-            self.refresh()  # Refresh orders from database
-            
-            # Try again after refresh
+            # Search in database first
             order_data = self.db.get_order_by_id(order_id)
             if order_data:
-                logging.info(f"Order found after refresh: {order_data[0]}, {order_data[1]}")
-                return order_data
+                order = Order(
+                    id=order_data[0],
+                    order_number=order_data[1],
+                    amount=order_data[2],
+                    image_uri=order_data[3],
+                    comment_with_picture=order_data[4],
+                    commented=order_data[5],
+                    revealed=order_data[6],
+                    reimbursed=order_data[7],
+                    reimbursed_amount=order_data[8],
+                    note=order_data[9]
+                )
+                logging.info(f"Order found in database: {order.id}, {order.order_number}")
+                return order
                 
-            # If still not found, check _orders list for debugging
-            order_ids = [order[0] for order in self._orders]
-            logging.error(f"Order {order_id} not found even after refresh. Available IDs: {order_ids}")
-            
-            # Final fallback: manually search in _orders list
+            # Search in local cache
             for order in self._orders:
-                if order[0] == order_id:
-                    logging.info(f"Order found in local cache: {order[0]}, {order[1]}")
+                if order.id == order_id:
+                    logging.info(f"Order found in local cache: {order.id}, {order.order_number}")
                     return order
                     
             return None
         except Exception as e:
-            logging.error(f"Error getting order: {e}", exc_info=True)
+            logging.error(f"Error getting order by id: {e}", exc_info=True)
+            return None
+
+    def get_order_by_number(self, order_number: str) -> Optional[Order]:
+        """
+        Get an order by its order number
+        
+        Args:
+            order_number: The order number to search for
+            
+        Returns:
+            Order: The order if found, None otherwise
+        """
+        try:
+            # Search in database first
+            order_data = self.db.get_order_by_number(order_number)
+            if order_data:
+                order = Order(
+                    id=order_data[0],
+                    order_number=order_data[1],
+                    amount=order_data[2],
+                    image_uri=order_data[3],
+                    comment_with_picture=order_data[4],
+                    commented=order_data[5],
+                    revealed=order_data[6],
+                    reimbursed=order_data[7],
+                    reimbursed_amount=order_data[8],
+                    note=order_data[9]
+                )
+                logging.info(f"Order found in database: {order.id}, {order.order_number}")
+                return order
+                
+            # Search in local cache
+            for order in self._orders:
+                if order.order_number == order_number:
+                    logging.info(f"Order found in local cache: {order.id}, {order.order_number}")
+                    return order
+                    
+            return None
+        except Exception as e:
+            logging.error(f"Error getting order by number: {e}", exc_info=True)
             return None
 
     def update_order(self, order_id: int, order: Order) -> bool:

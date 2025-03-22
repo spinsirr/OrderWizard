@@ -5,8 +5,9 @@ from typing import Optional
 
 @dataclass
 class Order:
-    order_number: str
-    amount: float
+    id: Optional[int] = None
+    order_number: str = None
+    amount: float = 0.0 
     image_uri: Optional[str] = None
     comment_with_picture: bool = False
     commented: bool = False
@@ -46,10 +47,6 @@ class Order:
         Expected format: Order number followed by amount
         Example: "123-456-789 $12.34" or "123-456-789 12.34"
         """
-        order = Order(
-            order_number=None,
-            amount=0.0
-        )
         try:
             # Split text into lines and get the first non-empty line
             lines = [line.strip() for line in text.split('\n') if line.strip()]
@@ -63,6 +60,9 @@ class Order:
             parts = first_line.split()
             if len(parts) < 2:
                 raise ValueError("Text must contain both order number and amount")
+            
+            # Create new order instance
+            order = Order()
             
             # Get order number (first part)
             order.order_number = parts[0]
@@ -88,6 +88,7 @@ class Order:
     def to_tuple(self):
         """Convert order to tuple for database storage"""
         return (
+            self.id,
             self.order_number,
             self.amount,
             self.image_uri,
@@ -95,5 +96,6 @@ class Order:
             self.commented,
             self.revealed,
             self.reimbursed,
+            self.reimbursed_amount,
             self.note
         )

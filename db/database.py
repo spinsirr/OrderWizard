@@ -292,16 +292,14 @@ class Database:
             try:
                 self._validate_order(order)
                 cursor = conn.cursor()
+                # Get tuple values and remove the id (it's auto-generated)
+                values = order.to_tuple()[1:]  # Skip the id field
                 cursor.execute('''
                     INSERT INTO orders (
                         order_number, amount, image_uri, comment_with_picture, 
                         commented, revealed, reimbursed, reimbursed_amount, note
                     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ''', (
-                    order.order_number, order.amount, order.image_uri, order.comment_with_picture,
-                    order.commented, order.revealed, order.reimbursed, order.reimbursed_amount,
-                    order.note
-                ))
+                ''', values)
                 conn.commit()
                 return cursor.lastrowid
             except sqlite3.Error as e:
@@ -336,6 +334,10 @@ class Database:
             try:
                 self._validate_order(order)
                 cursor = conn.cursor()
+                # Get the tuple values (now includes id as first element)
+                values = order.to_tuple()
+                # Remove the id from the start and add it to the end for the WHERE clause
+                values = values[1:] + (order_id,)
                 cursor.execute('''
                     UPDATE orders SET
                         order_number = ?,
@@ -348,11 +350,7 @@ class Database:
                         reimbursed_amount = ?,
                         note = ?
                     WHERE id = ?
-                ''', (
-                    order.order_number, order.amount, order.image_uri, order.comment_with_picture,
-                    order.commented, order.revealed, order.reimbursed, order.reimbursed_amount,
-                    order.note, order_id
-                ))
+                ''', values)
                 conn.commit()
                 return cursor.rowcount > 0
             except sqlite3.Error as e:
@@ -360,6 +358,40 @@ class Database:
                 raise DatabaseError(str(e))
             except Exception as e:
                 logging.error(f"Exception in update_order: {e}")
+                raise
+        
+        return self._execute_with_lock(_operation)
+
+    def get_order_by_number(self, order_number: str):
+        """Get an order by its order number"""
+        def _operation(conn):
+            try:
+                logging.info(f"Database: Getting order with number {order_number}")
+                cursor = conn.cursor()
+                cursor.execute('SELECT * FROM orders WHERE order_number = ?', (order_number,))
+                result = cursor.fetchone()
+                
+                if result:
+                    logging.info(f"Database: Found order {order_number} - ID: {result[0]}")
+                else:
+                    logging.warning(f"Database: Order {order_number} not found in database")
+                    
+                    # Debug: Get a count of all orders
+                    cursor.execute('SELECT COUNT(*) FROM orders')
+                    count = cursor.fetchone()[0]
+                    logging.info(f"Database: Total order count: {count}")
+                    
+                    # Debug: Get all order numbers
+                    cursor.execute('SELECT order_number FROM orders')
+                    all_orders = cursor.fetchall()
+                    logging.info(f"Database: Available order numbers: {[o[0] for o in all_orders]}")
+                
+                return result
+            except sqlite3.Error as e:
+                logging.error(f"Database error in get_order_by_number: {e}", exc_info=True)
+                raise DatabaseError(f"Failed to get order {order_number}: {str(e)}")
+            except Exception as e:
+                logging.error(f"Exception in get_order_by_number: {e}", exc_info=True)
                 raise
         
         return self._execute_with_lock(_operation)

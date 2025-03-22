@@ -25,22 +25,38 @@ wheels/
 *.egg-info/
 .installed.cfg
 *.egg
-tests/
 
 # Virtual Environment
 venv/
 ENV/
-env/
-.env
+
+# IDE
+.idea/
+.vscode/
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon
+._*
+
+# Build files
+*.dmg
+dmg_staging/
+background.png
+icon.icns
+icon.iconset/
 
 # Database
 orders.db
+*.db
+*.sqlite3
 
 # Images
 images/
 
 # Misc
-.DS_Store
 *.log
 .coverage
 htmlcov/ 

@@ -36,15 +36,15 @@ class EditOrderView(ttk.Frame):
         logging.info(f"Initializing EditOrderView for order ID: {order_id}")
         
         # Get order data
-        self.order_data = self.viewmodel.get_order_by_id(order_id)
-        if not self.order_data:
+        self.order = self.viewmodel.get_order_by_id(order_id)
+        if not self.order:
             error_msg = f"Order {order_id} not found"
             logging.error(error_msg)
             # Add a small delay and then close the window
             self.after(100, self.on_close)
             raise ValueError(error_msg)
         
-        logging.info(f"Successfully retrieved order data: {self.order_data[0]}, {self.order_data[1]}")
+        logging.info(f"Successfully retrieved order data: {self.order.id}, {self.order.order_number}")
         
         try:
             self._init_ui()
@@ -59,7 +59,7 @@ class EditOrderView(ttk.Frame):
         # Create title
         title = ttk.Label(
             self,
-            text=f"Edit Order #{self.order_data[1]}",  # order number
+            text=f"Edit Order #{self.order.order_number}",  # order number
             font=("Helvetica", 24, "bold")
         )
         title.pack(pady=(0, 20))
@@ -85,7 +85,7 @@ class EditOrderView(ttk.Frame):
         right_frame = ttk.Frame(main_container)
         right_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         
-        if self.order_data[3]:  # image_uri
+        if self.order.image_uri:  # image_uri
             # If image exists, show image frame
             image_frame = self._init_image_frame(right_frame)
             image_frame.pack(fill=tk.BOTH, expand=True)
@@ -99,116 +99,98 @@ class EditOrderView(ttk.Frame):
         self._init_buttons()
         
     def _init_details_frame(self, parent):
-        """Initialize order details and status section"""
+        """Initialize the order details frame"""
         frame = ttk.LabelFrame(parent, text="Order Details", padding=10)
         
         # Order info
-        info_text = f"Order Number: {self.order_data[1]}\nAmount: ${self.order_data[2]:.2f}"
+        info_text = f"Order Number: {self.order.order_number}\nAmount: ${self.order.amount:.2f}"
         info_label = ttk.Label(
             frame,
             text=info_text,
-            font=("Helvetica", 11),
-            justify=tk.LEFT
+            font=("Helvetica", 12)
         )
-        info_label.pack(anchor=tk.W, pady=(0, 20))
+        info_label.pack(fill=tk.X, pady=(0, 10))
         
         # Status checkboxes
         self.status_vars = {
-            'comment_with_picture': tk.BooleanVar(value=self.order_data[4]),
-            'commented': tk.BooleanVar(value=self.order_data[5]),
-            'revealed': tk.BooleanVar(value=self.order_data[6]),
-            'reimbursed': tk.BooleanVar(value=self.order_data[7])
+            'comment_with_picture': tk.BooleanVar(value=self.order.comment_with_picture),
+            'commented': tk.BooleanVar(value=self.order.commented),
+            'revealed': tk.BooleanVar(value=self.order.revealed),
+            'reimbursed': tk.BooleanVar(value=self.order.reimbursed)
         }
         
-        # Create checkboxes with labels
-        status_labels = {
-            'comment_with_picture': "Comment with Picture",
-            'commented': "Commented",
-            'revealed': "Revealed",
-            'reimbursed': "Reimbursed"
-        }
-        
-        for key, label in status_labels.items():
-            checkbox = ttk.Checkbutton(
+        # Create checkboxes
+        for status, var in self.status_vars.items():
+            # Convert status name to display text
+            display_text = ' '.join(word.capitalize() for word in status.split('_'))
+            cb = ttk.Checkbutton(
                 frame,
-                text=label,
-                variable=self.status_vars[key]
+                text=display_text,
+                variable=var,
+                command=lambda s=status: self._on_status_change(s)
             )
-            checkbox.pack(anchor=tk.W, pady=5)
-            
-        # Note section
-        note_label = ttk.Label(
-            frame,
-            text="Note:",
-            font=("Helvetica", 11)
-        )
-        note_label.pack(anchor=tk.W, pady=(20, 5))
+            cb.pack(fill=tk.X, pady=2)
         
-        self.note_area = tk.Text(
-            frame,
-            wrap=tk.WORD,
-            font=("Helvetica", 11),
-            height=5,
-            width=40
-        )
-        self.note_area.pack(fill=tk.X, expand=False)
+        # Note area
+        note_label = ttk.Label(frame, text="Notes:")
+        note_label.pack(fill=tk.X, pady=(10, 2))
+        
+        self.note_area = tk.Text(frame, height=5, wrap=tk.WORD)
+        self.note_area.pack(fill=tk.BOTH, expand=True)
         
         # Set initial note text
-        if self.order_data[9]:  # note
-            self.note_area.insert("1.0", self.order_data[9])
+        if self.order.note:  # note
+            self.note_area.insert("1.0", self.order.note)
         
         return frame
         
     def _init_image_frame(self, parent):
-        """Initialize image display section"""
-        frame = ttk.LabelFrame(parent, text="Order Image", padding=10)
+        """Initialize the image display frame"""
+        frame = ttk.LabelFrame(parent, text="Image", padding=10)
         
         try:
             # Load and display image
-            image_path = self.order_data[3]
+            image_path = self.order.image_uri
             logging.info(f"Loading image: {image_path}")
             
-            image = Image.open(image_path)
-            # Calculate resize dimensions while maintaining aspect ratio
-            display_width = 400
-            display_height = 300  # Reduced height to make room for chatbox
-            
-            # Calculate aspect ratio
-            aspect_ratio = image.width / image.height
-            
-            if aspect_ratio > 1:
-                new_width = display_width
-                new_height = int(display_width / aspect_ratio)
+            if os.path.exists(image_path):
+                # Open and resize image
+                image = Image.open(image_path)
+                
+                # Calculate new size while maintaining aspect ratio
+                display_width = 400  # Desired width
+                ratio = display_width / image.width
+                display_height = int(image.height * ratio)
+                
+                image = image.resize((display_width, display_height), Image.Resampling.LANCZOS)
+                photo = ImageTk.PhotoImage(image)
+                
+                # Create and pack image label
+                self.current_image_display = ttk.Label(frame, image=photo)
+                self.current_image_display.image = photo  # Keep a reference
+                self.current_image_display.pack(pady=10)
+                
+                # Add chat frame below image
+                chat_frame = ttk.LabelFrame(frame, text="AI Assistant", padding=10)
+                chat_frame.pack(fill=tk.BOTH, expand=True)
+                self._init_llm_chatbox_content(chat_frame)
             else:
-                new_height = display_height
-                new_width = int(display_height * aspect_ratio)
-            
-            image = image.resize((new_width, new_height), Image.Resampling.LANCZOS)
-            photo = ImageTk.PhotoImage(image)
-            
-            # Create and pack image label
-            image_label = ttk.Label(frame, image=photo)
-            image_label.image = photo  # Keep a reference
-            image_label.pack(fill=tk.BOTH, expand=False)  # Changed to NO to make room for chatbox
-            
-            # Add LLM chatbox under the image
-            chat_frame = ttk.LabelFrame(frame, text="AI Assistant", padding=10)
-            chat_frame.pack(fill=tk.BOTH, expand=True, pady=(10, 0))
-            self._init_llm_chatbox_content(chat_frame)
-            
+                logging.error(f"Image file not found: {image_path}")
+                error_label = ttk.Label(
+                    frame,
+                    text="Image file not found",
+                    foreground="red"
+                )
+                error_label.pack(pady=10)
         except Exception as e:
             logging.error(f"Error loading image: {e}")
             error_label = ttk.Label(
                 frame,
-                text=f"Error loading image: {str(e)}"
+                text=f"Error loading image: {str(e)}",
+                foreground="red"
             )
-            error_label.pack(fill=tk.BOTH, expand=True)
-            
-            # Still show the chatbox even if image loading fails
-            chat_frame = ttk.LabelFrame(frame, text="AI Assistant", padding=10)
-            chat_frame.pack(fill=tk.BOTH, expand=True, pady=(10, 0))
-            self._init_llm_chatbox_content(chat_frame)
-            
+            error_label.pack(pady=10)
+        
         return frame
         
     def _init_llm_chatbox(self, parent):
@@ -322,32 +304,87 @@ class EditOrderView(ttk.Frame):
         try:
             # Create updated order object
             updated_order = Order(
-                order_number=self.order_data[1],
-                amount=self.order_data[2],
-                image_uri=self.order_data[3],
+                order_number=self.order.order_number,
+                amount=self.order.amount,
+                image_uri=self.order.image_uri,
                 comment_with_picture=self.status_vars['comment_with_picture'].get(),
                 commented=self.status_vars['commented'].get(),
                 revealed=self.status_vars['revealed'].get(),
                 reimbursed=self.status_vars['reimbursed'].get(),
-                reimbursed_amount=self.order_data[8],
+                reimbursed_amount=self.order.reimbursed_amount,
                 note=self.note_area.get("1.0", tk.END).strip()
             )
             
-            # Update through viewmodel
+            # Update in database
             if self.viewmodel.update_order(self.order_id, updated_order):
-                self.viewmodel.refresh()  # Refresh the list view
-                self._show_status("Order updated successfully")
-                # Close the edit window after a short delay
-                self.after(1000, self._handle_cancel)
+                self.status_label.config(
+                    text="Changes saved successfully",
+                    foreground="green"
+                )
+                # Schedule status message to clear after 3 seconds
+                self.after(3000, lambda: self.status_label.config(text=""))
             else:
-                self._show_status("Failed to update order", True)
-                
+                self.status_label.config(
+                    text="Failed to save changes",
+                    foreground="red"
+                )
         except Exception as e:
-            logging.error(f"Error updating order: {e}")
-            self._show_status(f"Error updating order: {str(e)}", True)
+            logging.error(f"Error saving changes: {e}")
+            self.status_label.config(
+                text=f"Error: {str(e)}",
+                foreground="red"
+            )
             
     def _handle_cancel(self):
         """Handle cancel button click"""
-        self.destroy()
         if self.on_close:
-            self.on_close() 
+            self.on_close()
+
+    def _on_status_change(self, status: str):
+        """
+        Handle status checkbox changes
+        
+        Args:
+            status: The status that changed
+        """
+        try:
+            # Get the new value
+            new_value = self.status_vars[status].get()
+            logging.info(f"Status change - {status}: {new_value}")
+            
+            # Create updated order with new status
+            updated_order = Order(
+                order_number=self.order.order_number,
+                amount=self.order.amount,
+                image_uri=self.order.image_uri,
+                comment_with_picture=self.status_vars['comment_with_picture'].get(),
+                commented=self.status_vars['commented'].get(),
+                revealed=self.status_vars['revealed'].get(),
+                reimbursed=self.status_vars['reimbursed'].get(),
+                reimbursed_amount=self.order.reimbursed_amount,
+                note=self.note_area.get("1.0", tk.END).strip()
+            )
+            
+            # Update in database
+            if self.viewmodel.update_order(self.order_id, updated_order):
+                self.status_label.config(
+                    text=f"{status.replace('_', ' ').title()} status updated",
+                    foreground="green"
+                )
+                # Schedule status message to clear after 3 seconds
+                self.after(3000, lambda: self.status_label.config(text=""))
+            else:
+                self.status_label.config(
+                    text=f"Failed to update {status}",
+                    foreground="red"
+                )
+                # Revert checkbox if update failed
+                self.status_vars[status].set(not new_value)
+        except Exception as e:
+            logging.error(f"Error updating status: {e}")
+            self.status_label.config(
+                text=f"Error: {str(e)}",
+                foreground="red"
+            )
+            # Revert checkbox on error
+            self.status_vars[status].set(not new_value) 
