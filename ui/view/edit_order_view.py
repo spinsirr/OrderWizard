@@ -321,8 +321,8 @@ class EditOrderView(ttk.Frame):
                     text="Changes saved successfully",
                     foreground="green"
                 )
-                # Schedule status message to clear after 3 seconds
-                self.after(3000, lambda: self.status_label.config(text=""))
+                # Close window after a short delay
+                self.after(500, self._handle_cancel)
             else:
                 self.status_label.config(
                     text="Failed to save changes",

@@ -136,7 +136,7 @@ class OrderListView(ttk.Frame):
         self.tree.column("Reimbursed", width=100)
         
         # Configure tag for completed orders
-        self.tree.tag_configure('completed', background='#90EE90')  # Light green color
+        self.tree.tag_configure('completed', background='#90EE90', foreground='black')  # Light green background with black text
         self.tree.tag_configure('match', background='#FFE5B4')  # Light orange for search matches
         
         # Add scrollbar
