@@ -11,6 +11,16 @@ logging.basicConfig(
     format='%(asctime)s - %(levelname)s - %(message)s'
 )
 
+# Development mode is assumed when:
+# 1. Not running as a frozen app (PyInstaller)
+# 2. Not explicitly set to production mode
+IS_FROZEN = getattr(sys, 'frozen', False)
+IS_PROD_MODE = os.environ.get('ORDERWIZARD_PROD_MODE', '0') == '1'
+IS_DEV_MODE = (not IS_FROZEN) and (not IS_PROD_MODE)
+
+if IS_DEV_MODE:
+    logging.info("Development mode detected: Using test database by default")
+
 def get_user_data_dir():
     """Get the user-specific data directory"""
     if sys.platform == 'darwin':
@@ -22,6 +32,13 @@ def get_user_data_dir():
     
     # Create directory if it doesn't exist
     os.makedirs(data_dir, exist_ok=True)
+    
+    # Create test directory if in dev mode
+    if IS_DEV_MODE:
+        test_dir = os.path.join(data_dir, 'test')
+        os.makedirs(test_dir, exist_ok=True)
+        return test_dir
+        
     return data_dir
 
 def resource_path(relative_path):
@@ -97,8 +114,16 @@ class Database:
     _initialized = False
     _init_lock = threading.Lock()
     
-    def __new__(cls, db_name="db/orders.db"):
+    def __new__(cls, db_name=None):
         """Singleton pattern to ensure only one Database instance"""
+        # Determine database name
+        if db_name is None:
+            if IS_DEV_MODE:
+                db_name = "db/test_orders.db"
+                logging.info("Using test database in development mode")
+            else:
+                db_name = "db/orders.db"
+        
         if cls._instance is None:
             cls._instance = super(Database, cls).__new__(cls)
             cls._instance.db_name = resource_path(db_name)
@@ -106,7 +131,14 @@ class Database:
             os.makedirs(os.path.dirname(cls._instance.db_name), exist_ok=True)
         return cls._instance
         
-    def __init__(self, db_name="db/orders.db"):
+    def __init__(self, db_name=None):
+        # Determine database name
+        if db_name is None:
+            if IS_DEV_MODE:
+                db_name = "db/test_orders.db"
+            else:
+                db_name = "db/orders.db"
+                
         # Avoid re-initialization
         if self._initialized:
             return

@@ -18,11 +18,22 @@ tkdnd_files = [
     (os.path.join(tkdnd_path, 'tkdnd_compat.tcl'), '.'),
 ]
 
+# 定义要包含的数据文件
+additional_datas = [
+    ('static', 'static'),
+]
+
+# 仅当icon.icns存在时才添加
+if os.path.exists('icon.icns'):
+    additional_datas.append(('icon.icns', '.'))
+else:
+    print("Warning: icon.icns not found. The application will be built without an icon.")
+
 a = Analysis(
     ['main.py'],
     pathex=[],
     binaries=tkdnd_files,
-    datas=[('dmg_staging/Applications/OrderWizard.app/Contents/Resources', 'Resources')],
+    datas=additional_datas,
     hiddenimports=['tkinterdnd2'],
     hookspath=[],
     hooksconfig={},
@@ -49,7 +60,7 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon=['icon.icns'],
+    icon=['icon.icns'] if os.path.exists('icon.icns') else None,
 )
 coll = COLLECT(
     exe,
@@ -63,6 +74,6 @@ coll = COLLECT(
 app = BUNDLE(
     coll,
     name='OrderWizard.app',
-    icon='icon.icns',
+    icon='icon.icns' if os.path.exists('icon.icns') else None,
     bundle_identifier=None,
 )

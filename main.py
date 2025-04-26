@@ -7,6 +7,28 @@ from tkinter import ttk
 from tkinter import messagebox
 from pathlib import Path
 import threading
+import argparse
+
+# Default to development mode when not frozen
+IS_FROZEN = getattr(sys, 'frozen', False)
+
+# Parse command line arguments
+parser = argparse.ArgumentParser(description='OrderWizard Application')
+parser.add_argument('--prod', action='store_true', help='Run in production mode with real database')
+parser.add_argument('--seed', action='store_true', help='Seed the test database with sample data (only in dev mode)')
+args = parser.parse_args()
+
+# Set mode environment variables based on arguments
+if args.prod:
+    os.environ['ORDERWIZARD_PROD_MODE'] = '1'
+    print("Running in PRODUCTION mode with real database")
+elif not IS_FROZEN:
+    print("Running in DEVELOPMENT mode with test database")
+    # Check if seed flag is set
+    if args.seed:
+        print("Seeding test database with sample data...")
+        from db.seed_test_data import seed_test_database
+        seed_test_database()
 
 try:
     from tkinterdnd2 import DND_FILES, TkinterDnD
