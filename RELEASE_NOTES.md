@@ -1,3 +1,22 @@
+# OrderWizard v1.0.2 Release Notes
+
+## New Features
+1. Application Packaging
+   - Mac OS application bundle (.app)
+   - Installable DMG package
+   - Custom application icon
+
+## Improvements
+- Improved startup performance
+- Better system integration
+- Standalone application with all dependencies bundled
+
+## Installation
+- Download OrderWizard.dmg
+- Double-click to open the DMG file
+- Drag OrderWizard to Applications folder
+- Launch from Applications
+
 # OrderWizard v1.0.1 Release Notes
 
 ## UI Improvements
